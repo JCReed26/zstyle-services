@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <style>
+        #chatBox {
+            border: 1px solid black;
+            height: 300px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #messageInput {
+            width: calc(100% - 70px);
+            padding: 8px;
+            margin-right: 5px;
+        }
+        #sendButton {
+            padding: 8px 15px;
+        }
+        #message {
+            background-color: black;
+        }
+        #clientMessage {
+            background-color: crimson;
+            margin-left: auto;
+            text-align: right;
+        }
+        #serverMessage {
+            background-color: blue;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chat Page</h1>
+    <button onclick="location.href='user_profile.html'">Return to Profile</button>
+
+    <div id="connectionStatus">
+        Disconnected
+    </div>
+
+    <div id="chatBox"></div>
+
+    <input type="text" id="messageInput" placeholder="Type your message..." disabled>
+    <button id="sendButton" disabled>Send</button>
+
+    <script>
+        let ws = null;
+
+        const chatBox = document.getElementById('chatBox');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const connectionStatus = document.getElementById('connectionStatus')
+
+        function connect() {
+            ws = new WebSocket('ws://localhost:8000/conn/chatws');
+
+            ws.onopen = function(event) {
+                console.log('Connected to Chat Websocket');
+                updateConnectionStatus(true);
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                addMessage('Connected to chat server', 'system');
+            };
+
+            ws.onmessage = function(event) {
+                console.log('Message recieved', event.data);
+                addMessage(event.data, 'server');
+            };
+
+            ws.onclose = function(event) {
+                console.log('Websocket Connection closed');
+                updateConnectionStatus(false);
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+                addMessage('Disconnected from server', 'system');
+
+                setTimeout(connect, 3000); // Attempt reconnect after 3sec
+            };
+
+            ws.onerror = function(event) {
+                console.error('WebSocket error:', error);
+                addMessage('Connection error occurred', 'system');
+            }
+        }
+
+        function updateConnectionStatus(status) {
+            if (status) {
+                connectionStatus.textContent = 'Connected';
+            } else {
+                connectionStatus.textContent = 'Disconnected';
+            }
+        }
+
+        function addMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            messageDiv.className = 'message';
+            if (type === 'client') {
+                messageDiv.className = 'clientMessage'
+            } else if (type === 'server') {
+                messageDiv.className = 'serverMessage'
+            } 
+            chatBox.appendChild(messageDiv);
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(message);
+                addMessage(message, 'client');
+                messageInput.value = '';
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+
+        connect();
+    </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+</head>
+<body>
+    <h1>User Profile</h1>
+    <div id="userInfo"></div>
+
+    <button onclick="location.href='chat.html'">Chat</button>
+    <button onclick="location.href='voice.html'">Voice</button>
+    <button onclick="location.href='chat_voice.html'">Chat/Voice</button>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const userData = JSON.parse(localStorage.getItem('userData'));
+
+            if (userData) {
+                const userInfoDiv = document.getElementById('userInfo');
+                let userInfoHtml = '<ul>';
+                for (const key in userData) {
+                    userInfoHtml += `<li><strong>${key}:</strong> ${userData[key]}</li>`;
+                }
+                userInfoHtml += '</ul>';
+                userInfoDiv.innerHTML = userInfoHtml;
+            } else {
+                window.location.href = 'login.html';
+            }
+        });
+    </script>
+</body>
+</html>
