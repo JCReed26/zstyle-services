@@ -3,4 +3,6 @@ uvicorn[standard]
 pymongo
 python-dotenv
 passlib[bcrypt]
-pydantic
+pydantic[email]
+google-generativeai
+google-genai

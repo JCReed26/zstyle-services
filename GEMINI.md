@@ -983,9 +983,8 @@ Fully managed, scalable service for ADK agents on Google Cloud.
 Serverless container platform for custom web applications.
 
 *   **Deployment**:
-    1.  Create a `Dockerfile` for your FastAPI app (using `google.adk.cli.fast_api.get_fast_api_app`).
-    2.  Use `gcloud run deploy --source .`.
-    3.  Alternatively, `adk deploy cloud_run` (simpler, opinionated).
+    1.  Use `gcloud run deploy --source .`.
+    2.  Alternatively, `adk deploy cloud_run` (simpler, opinionated).
 *   **Example `main.py`**:
     ```python
     import os
@@ -1008,10 +1007,9 @@ Serverless container platform for custom web applications.
 For maximum control, run your containerized agent in a Kubernetes cluster.
 
 *   **Deployment**:
-    1.  Build Docker image (`gcloud builds submit`).
-    2.  Create Kubernetes Deployment and Service YAMLs.
-    3.  Apply with `kubectl apply -f deployment.yaml`.
-    4.  Configure Workload Identity for GCP permissions.
+    1.  Create Kubernetes Deployment and Service YAMLs.
+    2.  Apply with `kubectl apply -f deployment.yaml`.
+    3.  Configure Workload Identity for GCP permissions.
 
 ### 12.5 CI/CD Integration
 
