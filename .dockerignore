@@ -1,0 +1,31 @@
+# Ignore .git directory
+.git
+
+# Ignore virtual environment
+.venv
+
+# Ignore Python cache directories
+__pycache__
+
+# Ignore editor/IDE specific files
+.vscode
+.idea
+
+# Ignore any local environment variables
+.env
+
+# Ignore test files if not needed in production image
+# tests/
+
+# Ignore build artifacts
+dist/
+build/
+*.egg-info/
+
+# Ignore logs
+*.log
+logs/
+
+# Ignore Dockerfile itself and .dockerignore
+Dockerfile
+.dockerignore

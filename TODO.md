@@ -1,14 +1,10 @@
-TODO 
+TODO List of major tasks
 
-TASK: connect and deploy
-/deployment - create 
-/frontend - refactor 
-/routers - refactor 
+1. Attach agent connection to admin board api call 
+2. Proxy the agent websockets appropriately 
+3. USEING FASTAPI DOCS - rebuild user authentication
+4. Rewrite dashboards to be in React with Daisy UI
 
-1. get URL from deployed agent instance 
-2. give network access to this IP 
-3. refactor /frontend to be /dashboards
-4. test connections through proxy server locally 
-5. attach to correct github repo
-6. do your own research and write up your own .cloudbuild pipeline 
-7. deploy to dev test ... deploy to prod test 
+
+a. /frontend - refactor to dashboards that are single device by IP access only
+

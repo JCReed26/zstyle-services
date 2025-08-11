@@ -9,9 +9,7 @@
     <h1>User Profile</h1>
     <div id="userInfo"></div>
 
-    <button onclick="location.href='chat.html'">Chat</button>
-    <button onclick="location.href='voice.html'">Voice</button>
-    <button onclick="location.href='chat_voice.html'">Chat/Voice</button>
+    <button onclick="goToChatVoice()">Chat/Voice</button>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -29,6 +27,15 @@
                 window.location.href = 'login.html';
             }
         });
+
+        function goToChatVoice() {
+            const userData = JSON.parse(localStorage.getItem('userData'));
+            if (userData && userData.user_id) {
+                window.location.href = `chat_voice.html?user_id=${userData.user_id}`;
+            } else {
+                alert("Could not find user ID. Please log in again.");
+            }
+        }
     </script>
 </body>
 </html>

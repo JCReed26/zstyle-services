@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from database.database import connect_to_mongo, close_mongo_connection
 from routers.users import router as users_router
-from routers.agent_sockets import router as agent_sockets_router
+from routers.client_to_agent import router as client_toAgent_router
 from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
@@ -12,7 +12,7 @@ async def lifespan(app: FastAPI):
     await connect_to_mongo()
     yield
     # On shutdown
-    close_mongo_connection()
+    await close_mongo_connection()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -25,9 +25,9 @@ app.add_middleware(
 )
 
 app.include_router(users_router)
-app.include_router(agent_sockets_router)
+app.include_router(client_toAgent_router)
 
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+app.mount("/static", StaticFiles(directory="dashboards"), name="static")
 
 @app.get("/")
 async def check_health():
