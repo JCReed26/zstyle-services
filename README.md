@@ -39,3 +39,12 @@ This application is built with FastAPI and can be run with uvicorn.
    ```
 
    This will start the backend server at `http://localhost:8000`.
+
+3. **Docker Run**:
+
+   from the root directory run 
+   '''bash
+   docker build -t agent-connect-server . && docker run -p 8000:8000 agent-connect-server
+   '''
+
+   This will start the backend server at 'http://0.0.0.0:8000/'.

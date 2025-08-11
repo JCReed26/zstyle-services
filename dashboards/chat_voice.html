@@ -7,6 +7,8 @@
 
   <body>
     <h1>ADK Streaming Test</h1>
+    <div id="user-info"></div>
+    <br />
     <div
       id="messages"
       style="height: 300px; overflow-y: auto; border: 1px solid black"></div>
@@ -19,6 +21,18 @@
       <button type="button" id="startAudioButton">Start Audio</button>
       <button type="button" id="stopAudioButton" disabled>Stop Audio</button>
     </form>
+
+    <script>
+      const urlParams = new URLSearchParams(window.location.search);
+      const userId = urlParams.get('user_id'); // Get user_id directly
+      const userInfoDiv = document.getElementById('user-info');
+
+      if (userId) {
+          userInfoDiv.textContent = `User ID: ${userId}`; // Display user_id
+      } else {
+          userInfoDiv.textContent = "No user ID provided."; // Handle case where user_id is not in the URL
+      }
+    </script>
   </body>
 
 </html>

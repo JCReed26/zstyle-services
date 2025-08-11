@@ -29,6 +29,9 @@ async def add_new_user_endpt(user: UserCreate):
             detail="Failed to create user."
         )
 
+# AI Generated CRAP - rewrite using FastAPI built in capabilities 
+# JIMMY START FUCKING LOCKING IN ON YOUR CODE AND USE THE DOCS 
+# SCALABLE CLEAN QUALITY SOFTWARE 
 @router.post("/login", response_model=User)
 async def login_for_access_token(form_data: UserLogin):
     """

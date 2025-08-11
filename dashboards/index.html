@@ -31,8 +31,8 @@
 
             if (response.ok) {
                 const userData = await response.json();
-                localStorage.setItem('userData', JSON.stringify(userData));
-                window.location.href = 'user_profile.html';
+                const userDataStr = encodeURIComponent(JSON.stringify(userData));
+                window.location.href = `new_profile_page.html?userData=${userDataStr}`;
             } else {
                 alert('Failed to login.');
             }

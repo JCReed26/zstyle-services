@@ -23,8 +23,9 @@
  */
 
 // Connect the server with a WebSocket connection
-const sessionId = Math.random().toString().substring(10);
-const ws_url ="ws://localhost:8000/conn/ws/";
+const urlParams = new URLSearchParams(window.location.search);
+const userId = urlParams.get('user_id');
+
 let websocket = null;
 let is_audio = false;
 let isClosing = false;
@@ -48,8 +49,18 @@ function connectWebsocket() {
   // reset closing flag
   isClosing = false;
 
-  // Connect websocket ------------- userId when there for frontend cry bitch
-  websocket = new WebSocket(ws_url + sessionId + "?is_audio=" + is_audio);
+  if (!userId) {
+      alert("User ID not found. Please log in.");
+      window.location.href = 'login.html';
+      return;
+  }
+
+  const ws_protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws_url = `${ws_protocol}//${window.location.host}/agent/ws-proxy/${userId}?is_audio=${is_audio}`;
+  console.log("ws_url: " + ws_url)
+
+  // Connect websocket
+  websocket = new WebSocket(ws_url);
 
   // Handle connection open
   websocket.onopen = function () {
