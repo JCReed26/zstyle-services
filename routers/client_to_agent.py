@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-#AGENT_URL = "ws://0.0.0.0:3000/ws" # Local Agent WebSocket URL
-
+#AGENT_URL = "ws://localhost:3000/ws" # Local Agent WebSocket URL
 AGENT_URL = os.getenv("AGENT_URL") # GCP Secret WebSocket URL
+if not AGENT_URL:
+    raise RuntimeError("AGENT_URL environment variable is not set.")
 
 router = APIRouter(prefix="/agent")
 
@@ -60,8 +61,8 @@ async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str):
     print(f"someone is connecting ...")
     if AGENT_URL is None:
         raise ValueError("AGENT_URL environment variable is not set. Please ensure it is configured.")
-    base_url = AGENT_URL + f'/{user_id}'
-    final_url = base_url + f'?{is_audio}'
+    base_url = f"{AGENT_URL}/{user_id}"
+    final_url = f"{base_url}?is_audio={is_audio}"
     print(f"DEBUG: final agent url: {final_url} begin connection")
     websocket_proxy = WebsocketHandler(user_id, is_audio, final_url, websocket)
     await websocket_proxy.connect()
