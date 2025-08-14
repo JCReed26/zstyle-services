@@ -15,4 +15,4 @@ EXPOSE 8080
 
 # Command to run your application with Uvicorn
 # Replace 'main:app' with the actual module and ASGI app instance path
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", {$PORT}]
+CMD ["gunicorn", "-w", "6", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:$PORT"]
