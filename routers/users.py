@@ -1,5 +1,5 @@
 """User Data Passage + CRUD"""
-from fastapi import APIRouter, HTTPException, status, Body
+from fastapi import APIRouter, HTTPException, status
 from database.crud import create_new_user, get_user_by_email, get_all_users, get_user_by_id, delete_user
 from database.schema import User, UserCreate, UserLogin
 from auth import verify_password
