@@ -31,5 +31,5 @@ async def close_mongo_connection():
 
 def get_user_collection():
     if db.client:
-        return db.client['UserDatabase']['UserData']
+        return db.client['diverge']['users']
     return None
