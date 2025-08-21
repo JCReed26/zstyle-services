@@ -56,7 +56,7 @@ function connectWebsocket() {
   }
 
   const ws_protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws_url = `${ws_protocol}//${window.location.host}{process.env.AGENT_URL}/ws/${userId}?is_audio=${is_audio}`;
+  const ws_url = `${ws_protocol}//${window.location.host}/agent/ws-proxy/${userId}?is_audio=${is_audio}`;
   console.log("ws_url: " + ws_url)
 
   // Connect websocket
