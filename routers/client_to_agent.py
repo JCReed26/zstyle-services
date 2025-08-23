@@ -61,7 +61,7 @@ async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str):
     print(f"someone is connecting ...")
     if AGENT_URL is None:
         raise ValueError("AGENT_URL environment variable is not set. Please ensure it is configured.")
-    base_url = f"{AGENT_URL}/ws/{user_id}"
+    base_url = f"wss://{AGENT_URL}/ws/{user_id}"
     final_url = f"{base_url}?is_audio={is_audio}"
     print(f"DEBUG: final agent url: {final_url} begin connection")
     websocket_proxy = WebsocketHandler(user_id, is_audio, final_url, websocket)
