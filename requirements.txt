@@ -6,3 +6,4 @@ passlib[bcrypt]
 pydantic[email]
 google-generativeai
 google-genai
+google-cloud-logging

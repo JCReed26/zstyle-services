@@ -4,10 +4,11 @@ from database.crud import create_new_user, get_user_by_email, get_all_users, get
 from database.schema import User, UserCreate, UserLogin
 from auth import verify_password
 from typing import List
-from google.cloud import logging as gcp_logging
+import google.cloud.logging
 
-logging_client = gcp_logging.Client()
-logger = logging_client.logger(__name__)
+logging_client = google.cloud.logging.Client()
+logger = logging_client.setup_logging()
+
 
 router = APIRouter(prefix="/user")
 

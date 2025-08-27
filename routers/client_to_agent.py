@@ -3,15 +3,16 @@ import websockets
 import asyncio 
 import os 
 from dotenv import load_dotenv
-from google.cloud import logging as gcp_logging
+import google.cloud.logging
+
+logging_client = google.cloud.logging.Client()
+logger = logging_client.setup_logging()
 
 load_dotenv()
 
 #AGENT_URL = "ws://localhost:3000/" # Local Agent WebSocket URL
 AGENT_URL = os.getenv("AGENT_URL") # GCP Secret WebSocket URL
 
-logging_client = gcp_logging.Client()
-logger = logging_client.logger(__name__)
 if not AGENT_URL:
     raise RuntimeError("AGENT_URL environment variable is not set.")
 
