@@ -1,13 +1,19 @@
 """User Data Passage + CRUD"""
+
 from fastapi import APIRouter, HTTPException, status
 from database.crud import create_new_user, get_user_by_email, get_all_users, get_user_by_id, delete_user
 from database.schema import User, UserCreate, UserLogin
 from auth import verify_password
 from typing import List
-import google.cloud.logging
+import logging
+from google.cloud.logging import Client
+from google.cloud.logging.handlers import CloudLoggingHandler
 
-logging_client = google.cloud.logging.Client()
-logger = logging_client.setup_logging()
+logging_client = Client()
+handler = CloudLoggingHandler(logging_client)
+logger = logging.getLogger("agent-connect-server.users")
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 
 router = APIRouter(prefix="/user")

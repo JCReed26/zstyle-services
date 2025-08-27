@@ -3,10 +3,16 @@ import websockets
 import asyncio 
 import os 
 from dotenv import load_dotenv
-import google.cloud.logging
 
-logging_client = google.cloud.logging.Client()
-logger = logging_client.setup_logging()
+import logging
+from google.cloud.logging import Client
+from google.cloud.logging.handlers import CloudLoggingHandler
+
+logging_client = Client()
+handler = CloudLoggingHandler(logging_client)
+logger = logging.getLogger("agent-connect-server.client_to_agent")
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 load_dotenv()
 
