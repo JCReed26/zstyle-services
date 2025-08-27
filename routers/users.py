@@ -4,6 +4,10 @@ from database.crud import create_new_user, get_user_by_email, get_all_users, get
 from database.schema import User, UserCreate, UserLogin
 from auth import verify_password
 from typing import List
+from google.cloud import logging as gcp_logging
+
+logging_client = gcp_logging.Client()
+logger = logging_client.logger(__name__)
 
 router = APIRouter(prefix="/user")
 
@@ -13,7 +17,7 @@ async def add_new_user_endpt(user: UserCreate):
     Creates a new user in the database.
     """
     # Check if user already exists
-    print(f"******creating a new user: {user}")
+    logger.info(f"******creating a new user: {user}")
     existing_user = await get_user_by_email(user.email)
     if existing_user:
         raise HTTPException(
@@ -65,13 +69,3 @@ async def get_user_by_id_endpt(userid: str):
     if user:
         return user
     raise HTTPException(status_code=404, detail="User not found")
-
-@router.delete("/{userid}")
-async def delete_user_endpt(userid: str):
-    """
-    Deletes a user by their unique userid.
-    """
-    if await delete_user(userid):
-        return {"message": f"User {userid} deleted successfully."}
-    
-    raise HTTPException(status_code=404, detail="User not found or could not be deleted.")

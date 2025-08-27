@@ -3,11 +3,15 @@ import websockets
 import asyncio 
 import os 
 from dotenv import load_dotenv
+from google.cloud import logging as gcp_logging
 
 load_dotenv()
 
-#AGENT_URL = "ws://localhost:3000/ws" # Local Agent WebSocket URL
+#AGENT_URL = "ws://localhost:3000/" # Local Agent WebSocket URL
 AGENT_URL = os.getenv("AGENT_URL") # GCP Secret WebSocket URL
+
+logging_client = gcp_logging.Client()
+logger = logging_client.logger(__name__)
 if not AGENT_URL:
     raise RuntimeError("AGENT_URL environment variable is not set.")
 
@@ -58,12 +62,11 @@ class WebsocketHandler:
 @router.websocket("/ws-proxy/{user_id}")
 async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str):
     # Need to build the url here from 
-    print(f"someone is connecting ...")
+    logger.info(f"User {user_id} is connecting ...")
     if AGENT_URL is None:
         raise ValueError("AGENT_URL environment variable is not set. Please ensure it is configured.")
-    base_url = f"wss://{AGENT_URL}/ws/{user_id}"
-    final_url = f"{base_url}?is_audio={is_audio}"
-    print(f"DEBUG: final agent url: {final_url} begin connection")
+    final_url = f"wss://{AGENT_URL}/ws/{user_id}?is_audio={is_audio}"
+    logger.debug(f"DEBUG: final agent url: {final_url} begin connection")
     websocket_proxy = WebsocketHandler(user_id, is_audio, final_url, websocket)
     await websocket_proxy.connect()
 
