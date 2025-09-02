@@ -10,3 +10,11 @@ __pycache__/
 .env
 
 .gemini
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+plan.tfplan
+*.tfvars
+*.auto.tfvars

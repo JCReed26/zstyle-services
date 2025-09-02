@@ -1,0 +1,27 @@
+# This is an example file. Copy it to 'terraform.tfvars' and fill in your values.
+# The 'terraform.tfvars' file is ignored by git and should NOT be committed.
+
+# GCP Project Configuration
+project_id = "your-gcp-project-id"
+
+# Cloud Run Configuration
+# Example for an image in Artifact Registry
+cr_proxy_image        = "us-central1-docker.pkg.dev/your-gcp-project-id/your-repo-name/agent-connect-server:latest"
+cr_agent_service_name = "zstyle" # The name of the existing agent service
+
+# Load Balancer and Domain Configuration
+lb_domain = "your.domain.com"
+
+# Secrets Configuration (from Google Secret Manager)
+# These should be the names (IDs) of the secrets you created in the previous step.
+ssl_cert_secret_id = "cf-origin-cert"
+ssl_key_secret_id  = "cf-origin-key"
+
+# Cloud Armor - Cloudflare IP Ranges
+# Get the up-to-date list from https://www.cloudflare.com/ips/
+cloudflare_ip_ranges = [
+  "173.245.48.0/20",
+  "103.21.244.0/22",
+  "103.22.200.0/22"
+  # ... and the rest of the IPv4 ranges
+]
