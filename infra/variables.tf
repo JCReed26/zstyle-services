@@ -50,9 +50,3 @@ variable "ssl_key_secret_id" {
     description = "The ID of the secret in Secret Manager containing the SSL private key PEM."
     type        = string
 }
-
-variable "proxy_env" {
-    description = "Extra env vars for proxy"
-    type = map(string)
-    default = {}
-}

@@ -14,8 +14,8 @@ lb_domain = "your.domain.com"
 
 # Secrets Configuration (from Google Secret Manager)
 # These should be the names (IDs) of the secrets you created in the previous step.
-ssl_cert_secret_id = "cloudflare-origin-cert"
-ssl_key_secret_id  = "cloudflare-origin-key"
+ssl_cert_secret_id = "cf-origin-cert"
+ssl_key_secret_id  = "cf-origin-key"
 
 # Cloud Armor - Cloudflare IP Ranges
 # Get the up-to-date list from https://www.cloudflare.com/ips/

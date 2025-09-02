@@ -46,14 +46,14 @@ resource "google_compute_ssl_certificate" "origin_cert" {
     certificate = data.google_secret_manager_secret_version.ssl_cert.secret_data
 }
 
-resource "google_compute_target_http_proxy" "https_proxy" {
+resource "google_compute_target_https_proxy" "https_proxy" {
     name = "https-proxy"
     url_map = google_compute_url_map.urlmap.self_link
     ssl_certificates = [google_compute_ssl_certificate.origin_cert.self_link]
 }
 
 resource "google_compute_global_address" "lb_ip" {
-    name = "lb-ip"
+    name = "lb-ip-${var.cr_proxy_service_name}"
 }
 
 resource "google_compute_forwarding_rule" "https_fr" {

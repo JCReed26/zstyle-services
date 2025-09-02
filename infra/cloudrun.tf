@@ -15,7 +15,7 @@ resource "google_cloud_run_v2_service" "agent-connect-server" {
     ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCING"
 
     template {
-      service_account = google_service_account.agent-connect-serverless
+      service_account = google_service_account.agent-connect-serverless.email
         scaling {
             min_instance_count = var.min_instances
             max_instance_count = var.max_instances
@@ -23,15 +23,14 @@ resource "google_cloud_run_v2_service" "agent-connect-server" {
 
         containers {
             image = var.cr_proxy_image
-            env = concat(
-                [for k,v in var.proxy_env : { name = k, value = v }],
-                [
-                    {
-                        name = "AGENT_SERVICE_URL"
-                        value = data.google_cloud_run_service.zstyle.status[0].url
-                    }
-                ]
-            )
+
+            env {
+                name  = "AGENT_URL"
+                # The python code expects a bare domain to prepend "wss://".
+                # We strip the "https://" scheme from the internal Cloud Run URL.
+                value = replace(data.google_cloud_run_service.zstyle.status[0].url, "https://", "")
+            }
+
             ports { container_port = 8080 }
         }
 
