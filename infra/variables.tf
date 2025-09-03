@@ -15,7 +15,12 @@ variable "lb_domain" {
 }
 
 variable "cloudflare_ip_ranges" {
-    description = "Cloudflare edge IP ranges allowed through Cloud Armor. See: https://www.cloudflare.com/ips/"
+    description = "First 8 IPv4 - Cloudflare edge IP ranges allowed through Cloud Armor. See: https://www.cloudflare.com/ips/"
+    type = list(string)
+}
+
+variable "cloudflare_ip_ranges_two" {
+    description = "Last 7 IPv4 - Cloudflare edge IP ranges allowed through Cloud Armor. See: https://www.cloudflare.com/ips/"
     type = list(string)
 }
 

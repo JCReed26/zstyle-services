@@ -12,7 +12,7 @@ data "google_cloud_run_service" "zstyle" {
 resource "google_cloud_run_v2_service" "agent-connect-server" {
     name = var.cr_proxy_service_name
     location = var.region
-    ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCING"
+    ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
     template {
       service_account = google_service_account.agent-connect-serverless.email
@@ -26,9 +26,9 @@ resource "google_cloud_run_v2_service" "agent-connect-server" {
 
             env {
                 name  = "AGENT_URL"
-                # The python code expects a bare domain to prepend "wss://".
-                # We strip the "https://" scheme from the internal Cloud Run URL.
-                value = replace(data.google_cloud_run_service.zstyle.status[0].url, "https://", "")
+                # The python code expects a bare domain to prepend "wss://". We extract just the hostname.
+                # e.g., "https://my-service-abc-uc.a.run.app" -> "my-service-abc-uc.a.run.app"
+                value = trimsuffix(replace(data.google_cloud_run_service.zstyle.status[0].url, "https://", ""), "/")
             }
 
             ports { container_port = 8080 }
@@ -39,6 +39,8 @@ resource "google_cloud_run_v2_service" "agent-connect-server" {
             egress = "ALL_TRAFFIC"
         }
     }
+
+    deletion_protection = false
 }
 
 # Allow proxy to call agent 

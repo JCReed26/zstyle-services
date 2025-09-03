@@ -1,6 +1,6 @@
 resource "google_compute_network" "serverless" {
     name = "serverless-vpc"
-    auto_create_subnetworks = true
+    auto_create_subnetworks = false
 }
 
 resource "google_compute_subnetwork" "serverless" {
@@ -13,13 +13,18 @@ resource "google_compute_subnetwork" "serverless" {
 resource "google_vpc_access_connector" "serverless" {
     name = "serverless-connector"
     region = var.region
-    network = google_compute_network.serverless.name
+    network = google_compute_network.serverless.id
     ip_cidr_range = "10.8.0.16/28"
+    max_instances = 6
+    min_instances = 2
 }
 
 resource "google_compute_address" "nat_ip" {
     name = "serverless-nat-ip"
     address_type = "EXTERNAL"
+    lifecycle {
+      prevent_destroy = true
+    }
 }
 
 resource "google_compute_router" "router" {

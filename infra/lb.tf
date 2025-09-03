@@ -12,12 +12,12 @@ resource "google_compute_region_network_endpoint_group" "cr_neg" {
 resource "google_compute_backend_service" "backend" {
     provider = google-beta
     name = "be-${var.cr_proxy_service_name}"
-    protocol = "HTTP"
+    protocol = "HTTPS"
     load_balancing_scheme = "EXTERNAL"
-    timeout_sec = 600
+    
 
     backend {
-        group = google_compute_region_network_endpoint_group.cr_neg.name
+        group = google_compute_region_network_endpoint_group.cr_neg.self_link
     }
 
     security_policy = google_compute_security_policy.cf_allowlist.self_link
@@ -41,9 +41,12 @@ data "google_secret_manager_secret_version" "ssl_key" {
 }
 
 resource "google_compute_ssl_certificate" "origin_cert" {
-    name = "origin-cert"
+    name = "origin-cert-${data.google_secret_manager_secret_version.ssl_cert.version}"
     private_key = data.google_secret_manager_secret_version.ssl_key.secret_data
     certificate = data.google_secret_manager_secret_version.ssl_cert.secret_data
+    lifecycle {
+      create_before_destroy = true
+    }
 }
 
 resource "google_compute_target_https_proxy" "https_proxy" {
@@ -54,13 +57,16 @@ resource "google_compute_target_https_proxy" "https_proxy" {
 
 resource "google_compute_global_address" "lb_ip" {
     name = "lb-ip-${var.cr_proxy_service_name}"
+    lifecycle {
+      prevent_destroy = true
+    }
 }
 
-resource "google_compute_forwarding_rule" "https_fr" {
+resource "google_compute_global_forwarding_rule" "https_fr" {
     name = "https-fr"
     load_balancing_scheme = "EXTERNAL"
     ip_protocol = "TCP"
     port_range = "443"
-    target = google_compute_target_http_proxy.https_proxy.self_link
+    target = google_compute_target_https_proxy.https_proxy.self_link
     ip_address = google_compute_global_address.lb_ip.address
 }
