@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -5,6 +6,8 @@ from database.database import connect_to_mongo, close_mongo_connection
 from routers.users import router as users_router
 from routers.client_to_agent import router as client_toAgent_router
 from fastapi.middleware.cors import CORSMiddleware
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s:\t  %(name)s:%(message)s')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
