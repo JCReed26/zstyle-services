@@ -16,11 +16,10 @@ async def create_new_user(newUser: UserCreate):
 
     result = await collection.insert_one(user_doc)
     if result.inserted_id:
-        # Retrieve the newly created user to ensure all fields are correctly populated, including the MongoDB-generated _id
+        # Retrieve the newly created user to ensure all fields are correctly populated
         created_user_from_db = await collection.find_one({"_id": result.inserted_id})
         if created_user_from_db:
-            created_user_from_db["id"] = str(created_user_from_db["_id"])
-            del created_user_from_db["_id"]
+            # Let Pydantic handle the _id to id mapping
             return User(**created_user_from_db)
     return None
 
@@ -28,49 +27,32 @@ async def get_user_by_email(email: str):
     collection = get_user_collection()
     if collection is None:
         return None
-    user_by_email = await collection.find_one({"email": email})
-    if user_by_email:
-        # Map MongoDB's _id to id for the returned User object
-        user_by_email["id"] = str(user_by_email['_id'])
-        del user_by_email['_id']
-    return user_by_email
+    # Return the raw document, Pydantic will handle the _id mapping
+    return await collection.find_one({"email": email})
 
 async def get_all_users():
     collection = get_user_collection()
     if collection is None:
         return []
-    users = await collection.find().to_list(length=100)
-    for user in users:
-        if '_id' in user:
-            user["id"] = str(user['_id'])
-            del user['_id']
-    return users
+    # Pydantic will handle the _id mapping for each user in the list
+    return await collection.find().to_list(length=100)
 
 async def get_user_by_phone_number(phone_number: str):
     collection = get_user_collection()
     if collection is None:
         return None
-    user_by_phone = await collection.find_one({"phone_number": phone_number})
-    if user_by_phone:
-        user_by_phone["id"] = str(user_by_phone['_id'])
-        del user_by_phone['_id']
-    return user_by_phone
-
-from bson.objectid import ObjectId
+    # Return the raw document, Pydantic will handle the _id mapping
+    return await collection.find_one({"phone_number": phone_number})
 
 async def get_user_by_id(id: str):
     collection = get_user_collection()
     if collection is None:
         return None
     try:
-        user = await collection.find_one({"_id": ObjectId(id)})
+        # Return the raw document, Pydantic will handle the _id mapping
+        return await collection.find_one({"_id": ObjectId(id)})
     except Exception:
         return None
-    
-    if user:
-        user["id"] = str(user['_id'])
-        del user['_id']
-    return user
 
 async def delete_user(id: str):
     collection = get_user_collection()

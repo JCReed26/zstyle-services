@@ -33,6 +33,7 @@ async def add_new_user_endpt(user: UserCreate):
         )
     created_user = await create_new_user(user)
     if created_user:
+        created_user['_id'] = str(created_user['_id'])
         return created_user
     else:
         raise HTTPException(
@@ -55,6 +56,7 @@ async def login_for_access_token(form_data: UserLogin):
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    user['_id'] = str(user['_id'])
     return User(**user)
 
 
@@ -65,6 +67,8 @@ async def get_all_users_endpt():
     """
     users = await get_all_users()
     # No need to check if users exist, an empty list is a valid response.
+    for user in users:
+        user['_id'] = str(user['_id'])
     return users
 
 @router.get("/{userid}", response_model=User)
@@ -74,5 +78,6 @@ async def get_user_by_id_endpt(userid: str):
     """
     user = await get_user_by_id(userid)
     if user:
+        user['_id'] = str(user['_id'])
         return user
     raise HTTPException(status_code=404, detail="User not found")
