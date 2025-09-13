@@ -156,19 +156,17 @@
                             d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                     </svg>
                 </button>
-                <p id="mic-status" class="text-sm font-medium text-gray-600 mt-3">Click the icon to start recording</p>
+                <p id="mic-status" class="text-sm font-medium text-gray-600 mt-3">Type a message or click the icon to start recording</p>
             </div>
             
             <!-- Text Chat Input -->
             <div class="mt-6 max-w-md mx-auto">
                 <div class="flex gap-2">
-                    <input type="text" id="text-input" 
-                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                           placeholder="Type your message..." 
-                           disabled>
-                    <button id="send-button" 
-                            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled>
+                    <input type="text" id="text-input"
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           placeholder="Type your message...">
+                    <button id="send-button"
+                            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                         Send
                     </button>
                 </div>
@@ -281,7 +279,7 @@
             stream.stop();
             isRecording = false;
             micButton.classList.remove('mic-active');
-            micStatus.textContent = 'Click the icon to start recording';
+            micStatus.textContent = 'Type a message or click the icon to start recording';
         }
 
         // Initialize multimodal client
@@ -293,10 +291,7 @@
 
                 stream.onReady = () => {
                     console.log('Stream ready');
-                    micStatus.textContent = 'Connected - Click to start recording';
-                    // Enable text input when connected
-                    textInput.disabled = false;
-                    sendButton.disabled = false;
+                    micStatus.textContent = 'Connected - Click to start recording or type a message';
                 };
 
                 stream.onAudioReceived = (audioData) => {
@@ -337,9 +332,9 @@
                 stream.onError = (error) => {
                     console.error('Stream error:', error);
                     updateTranscript("Sorry, an error occurred. Please try again.", "assistant");
-                    currentResponseText = ''; 
+                    currentResponseText = '';
                     isFirstChunk = true;
-                    micStatus.textContent = 'Error occurred - Click to retry';
+                    micStatus.textContent = 'Error occurred - Type a message or click to retry';
                 };
 
                 stream.onInterrupted = () => {
@@ -352,7 +347,7 @@
             } catch (error) {
                 console.error('Failed to initialize stream:', error);
                 updateTranscript("Sorry, connection failed. Please try again later.", "assistant");
-                micStatus.textContent = 'Connection failed - Refresh to retry';
+                micStatus.textContent = 'Connection failed - Type a message or refresh to retry';
             }
         }
 
@@ -362,21 +357,41 @@
         });
 
         // Text message sending functionality
-        function sendTextMessage() {
+        async function sendTextMessage() {
             const message = textInput.value.trim();
-            if (message && stream.isConnected) {
-                // Add user message to transcript immediately
-                updateTranscript(message, 'user');
-                
+            if (!message) return;
+
+            // Add user message to transcript immediately
+            updateTranscript(message, 'user');
+
+            // Clear input
+            textInput.value = '';
+
+            if (stream.isConnected) {
                 // Send message through WebSocket
                 stream.ws.send(JSON.stringify({
                     mime_type: 'text/plain',
                     data: message
                 }));
-                
-                // Clear input
-                textInput.value = '';
                 console.log('[CLIENT TO AGENT] text:', message);
+            } else {
+                // Try to establish connection
+                try {
+                    console.log('Attempting to connect for text message...');
+                    await stream.openConnection();
+                    if (stream.isConnected) {
+                        stream.ws.send(JSON.stringify({
+                            mime_type: 'text/plain',
+                            data: message
+                        }));
+                        console.log('[CLIENT TO AGENT] text:', message);
+                    } else {
+                        updateTranscript("Unable to connect to the assistant. Please check your connection and try again.", "assistant");
+                    }
+                } catch (error) {
+                    console.error('Failed to send text message:', error);
+                    updateTranscript("Failed to send message. The service may be temporarily unavailable. Please try again later.", "assistant");
+                }
             }
         }
 
