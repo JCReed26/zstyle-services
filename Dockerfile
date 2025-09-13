@@ -13,6 +13,6 @@ COPY . .
 
 EXPOSE 8080
 
-# Command to run your application with Uvicorn
-# Replace 'main:app' with the actual module and ASGI app instance path
-CMD ["gunicorn", "-w", "6", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "120", "main:app", "--bind", "0.0.0.0:8080"]
+# Command to run your application with Gunicorn (single worker for WebSocket support)
+# Use single worker with Gunicorn for WebSocket compatibility
+CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "120", "main:app", "--bind", "0.0.0.0:8080"]

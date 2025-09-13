@@ -7,7 +7,9 @@ import websockets
 import asyncio
 import os
 import json
+import time
 from typing import Optional
+from collections import defaultdict
 from dotenv import load_dotenv
 
 import logging
@@ -35,26 +37,47 @@ except Exception as e:
 
 load_dotenv()
 
-#AGENT_URL = "ws://localhost:3000/" # Local Agent WebSocket URL
-AGENT_URL = os.getenv("AGENT_URL") # GCP Secret WebSocket URL
+# Get AGENT_URL from environment or use localhost default for development
+AGENT_URL = os.getenv("AGENT_URL", "localhost:5000")
 
-# For local development, AGENT_URL can be None - we'll handle this in the websocket endpoint
-if not AGENT_URL:
-    logger.warning("AGENT_URL environment variable is not set - WebSocket proxy will not work until configured")
+# Remove any protocol prefix if present and clean the URL
+if AGENT_URL.startswith("http://"):
+    AGENT_URL = AGENT_URL[7:]
+elif AGENT_URL.startswith("https://"):
+    AGENT_URL = AGENT_URL[8:]
+elif AGENT_URL.startswith("ws://"):
+    AGENT_URL = AGENT_URL[5:]
+elif AGENT_URL.startswith("wss://"):
+    AGENT_URL = AGENT_URL[6:]
+
+logger.info(f"Agent URL configured as: {AGENT_URL}")
 
 router = APIRouter(prefix="/agent")
 
-
-""""From this point on I know what is happening but it is a different implementation than mine
-    although mine worked locally when I deployed to cloudrun it did not I asked ai for help
-    x-ai/grok-code-fast-1 to improve for the proxy of a bidi connection
-    
-    DEBUG HERE: AI mixed with human written code"""
-
 # Connection timeouts and limits
-CONNECTION_TIMEOUT = 60  # seconds
-MESSAGE_TIMEOUT = 30     # seconds
+CONNECTION_TIMEOUT = 30  # seconds
 MAX_CONNECTIONS_PER_USER = 3
+
+class RateLimiter:
+    """Rate limiter to prevent connection storms per user"""
+    def __init__(self, max_attempts: int = 3, window_seconds: int = 60):
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self.attempts: dict[str, list] = defaultdict(list)
+    
+    def is_allowed(self, user_id: str) -> bool:
+        now = time.time()
+        # Clean old attempts
+        self.attempts[user_id] = [
+            attempt_time for attempt_time in self.attempts[user_id]
+            if now - attempt_time < self.window_seconds
+        ]
+        
+        if len(self.attempts[user_id]) >= self.max_attempts:
+            return False
+        
+        self.attempts[user_id].append(now)
+        return True
 
 class ConnectionManager:
     """Manages active WebSocket connections per user"""
@@ -75,8 +98,9 @@ class ConnectionManager:
     def get_user_connection_count(self, user_id: str) -> int:
         return len(self.active_connections.get(user_id, set()))
 
-# Global connection manager
+# Global connection manager and rate limiter
 connection_manager = ConnectionManager()
+rate_limiter = RateLimiter(max_attempts=3, window_seconds=60)
 
 class WebsocketHandler:
     def __init__(self, user_id: str, is_audio: str, remote_url: str, client_ws: WebSocket):
@@ -84,10 +108,8 @@ class WebsocketHandler:
         self.is_audio = is_audio
         self.remote_url = remote_url
         self.client_ws = client_ws
-        self.remote_ws: Optional[websockets.WebSocketServerProtocol] = None
+        self.remote_ws: Optional[websockets.WebSocketClientProtocol] = None
         self._running = True
-        self._client_task: Optional[asyncio.Task] = None
-        self._remote_task: Optional[asyncio.Task] = None
 
     async def connect(self):
         """Main connection handler with proper cleanup"""
@@ -105,46 +127,64 @@ class WebsocketHandler:
             connection_manager.add_connection(self.user_id, self)
 
             logger.info(f"Accepted client connection for user {self.user_id}")
+            logger.info(f"Attempting to connect to remote: {self.remote_url}")
 
             # Connect to remote with timeout
             try:
                 self.remote_ws = await asyncio.wait_for(
                     websockets.connect(
                         self.remote_url,
-                        extra_headers={"User-Agent": "agent-connect-proxy/1.0"}
                     ),
                     timeout=CONNECTION_TIMEOUT
                 )
+                logger.info(f"Successfully connected to remote agent for user {self.user_id}")
             except asyncio.TimeoutError:
                 logger.error(f"Connection timeout to remote for user {self.user_id}")
                 await self.client_ws.send_text(json.dumps({
-                    "error": "Connection timeout to agent service"
+                    "error": "Agent service temporarily unavailable. Please try again in a few minutes."
                 }))
                 return
             except Exception as e:
-                logger.error(f"Failed to connect to remote for user {self.user_id}: {e}")
-                await self.client_ws.send_text(json.dumps({
-                    "error": f"Failed to connect to agent service: {str(e)}"
-                }))
+                error_msg = str(e)
+                if "429" in error_msg or "rate limit" in error_msg.lower():
+                    logger.error(f"Rate limited by agent service for user {self.user_id}")
+                    await self.client_ws.send_text(json.dumps({
+                        "error": "Service is busy. Please wait a few minutes before trying again."
+                    }))
+                else:
+                    logger.error(f"Failed to connect to remote for user {self.user_id}: {e}")
+                    await self.client_ws.send_text(json.dumps({
+                        "error": "Unable to connect to agent service. Please try again later."
+                    }))
                 return
 
-            # Start bidirectional streaming tasks
-            self._client_task = asyncio.create_task(self._client_to_remote())
-            self._remote_task = asyncio.create_task(self._remote_to_client())
-
-            # Wait for either task to complete (indicating connection should close)
-            done, pending = await asyncio.wait(
-                [self._client_task, self._remote_task],
-                return_when=asyncio.FIRST_COMPLETED
-            )
-
-            # Cancel pending tasks
-            for task in pending:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            # Start bidirectional streaming
+            tasks = [
+                asyncio.create_task(self._client_to_remote()),
+                asyncio.create_task(self._remote_to_client())
+            ]
+            
+            try:
+                # Wait for either task to complete (indicating connection closed)
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                
+                # Cancel remaining tasks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                
+                # Check for exceptions in completed tasks
+                for task in done:
+                    try:
+                        await task
+                    except Exception as e:
+                        logger.error(f"Task error for user {self.user_id}: {e}")
+                        
+            except Exception as e:
+                logger.error(f"Error in bidirectional streaming for user {self.user_id}: {e}")
 
         except Exception as e:
             logger.error(f"Connection error for user {self.user_id}: {e}")
@@ -156,44 +196,15 @@ class WebsocketHandler:
         try:
             while self._running and self.remote_ws:
                 try:
-                    # Receive with timeout
-                    msg = await asyncio.wait_for(
-                        self.client_ws.receive(),
-                        timeout=MESSAGE_TIMEOUT
-                    )
+                    # Receive message from client
+                    message = await self.client_ws.receive_text()
+                    
+                    # Forward to remote agent
+                    await self.remote_ws.send(message)
+                    logger.debug(f"Forwarded message from client {self.user_id} to agent")
 
-                    if msg["type"] == "websocket.disconnect":
-                        logger.info(f"Client disconnected for user {self.user_id}")
-                        break
-
-                    # Handle text messages
-                    if "text" in msg and msg["text"] is not None:
-                        # Parse JSON message for proper ADK compatibility
-                        try:
-                            message_data = json.loads(msg["text"])
-
-                            # Handle ping messages from client (keep-alive)
-                            if message_data.get("type") == "ping":
-                                await self.client_ws.send_text(json.dumps({"type": "pong"}))
-                                continue
-
-                            # Forward message to remote agent
-                            await self.remote_ws.send(json.dumps(message_data))
-                            logger.debug(f"Forwarded text message from user {self.user_id}")
-                        except json.JSONDecodeError:
-                            # If not JSON, send as plain text
-                            await self.remote_ws.send(msg["text"])
-
-                    # Handle binary messages
-                    elif "bytes" in msg and msg["bytes"] is not None:
-                        await self.remote_ws.send(msg["bytes"])
-                        logger.debug(f"Forwarded binary message from user {self.user_id}")
-
-                except asyncio.TimeoutError:
-                    # Send ping to keep connection alive
-                    await self.client_ws.send_text(json.dumps({"type": "ping"}))
-                    continue
                 except WebSocketDisconnect:
+                    logger.info(f"Client {self.user_id} disconnected")
                     break
                 except Exception as e:
                     logger.error(f"Error in client-to-remote for user {self.user_id}: {e}")
@@ -209,30 +220,17 @@ class WebsocketHandler:
         try:
             while self._running and self.remote_ws:
                 try:
-                    # Receive message with timeout
-                    msg = await asyncio.wait_for(
-                        self.remote_ws.recv(),
-                        timeout=MESSAGE_TIMEOUT
-                    )
-
-                    # Handle different message types for ADK compatibility
-                    if isinstance(msg, str):
-                        # Try to parse as JSON first
-                        try:
-                            message_data = json.loads(msg)
-                            await self.client_ws.send_text(json.dumps(message_data))
-                        except json.JSONDecodeError:
-                            # If not JSON, send as plain text
-                            await self.client_ws.send_text(msg)
+                    # Receive message from remote agent
+                    message = await self.remote_ws.recv()
+                    
+                    # Forward to client
+                    if isinstance(message, str):
+                        await self.client_ws.send_text(message)
                     else:
-                        # Binary message
-                        await self.client_ws.send_bytes(msg)
+                        await self.client_ws.send_bytes(message)
+                    
+                    logger.debug(f"Forwarded message from agent to client {self.user_id}")
 
-                    logger.debug(f"Forwarded message to client for user {self.user_id}")
-
-                except asyncio.TimeoutError:
-                    # Connection is healthy, continue
-                    continue
                 except websockets.exceptions.ConnectionClosed:
                     logger.info(f"Remote connection closed for user {self.user_id}")
                     break
@@ -252,22 +250,19 @@ class WebsocketHandler:
         # Remove from connection manager
         connection_manager.remove_connection(self.user_id, self)
 
-        # Cancel tasks
-        for task in [self._client_task, self._remote_task]:
-            if task and not task.done():
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-
         # Close connections
-        for ws in [self.remote_ws, self.client_ws]:
-            if ws:
-                try:
-                    await ws.close()
-                except Exception:
-                    pass
+        try:
+            if self.remote_ws:
+                await self.remote_ws.close()
+        except Exception as e:
+            logger.debug(f"Error closing remote websocket: {e}")
+
+        try:
+            # Check if client websocket is still connected before closing
+            if hasattr(self.client_ws, 'client_state') and self.client_ws.client_state.name not in ["DISCONNECTED", "CONNECTING"]:
+                await self.client_ws.close()
+        except Exception as e:
+            logger.debug(f"Error closing client websocket: {e}")
 
         logger.info(f"Cleaned up connection for user {self.user_id}")
 
@@ -278,6 +273,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "websocket-proxy",
+        "agent_url": AGENT_URL,
         "active_connections": sum(len(connections) for connections in connection_manager.active_connections.values()),
         "users_connected": len(connection_manager.active_connections)
     }
@@ -295,10 +291,20 @@ async def get_user_connections(user_id: str):
 
 # All UIs will connect through this proxy websocket
 @router.websocket("/ws-proxy/{user_id}")
-async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str):
+async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str = "false"):
     """Main WebSocket proxy endpoint with enhanced error handling"""
     try:
         logger.info(f"User {user_id} is connecting (audio: {is_audio})...")
+
+        # Check rate limiting first
+        if not rate_limiter.is_allowed(user_id):
+            await websocket.accept()
+            await websocket.send_text(json.dumps({
+                "error": "Too many connection attempts. Please wait before retrying."
+            }))
+            await websocket.close()
+            logger.warning(f"Rate limited user {user_id}")
+            return
 
         # Validate inputs
         if not user_id or len(user_id) > 100:  # Reasonable limit
@@ -317,7 +323,7 @@ async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str):
             await websocket.close()
             return
 
-        if AGENT_URL is None:
+        if not AGENT_URL:
             await websocket.accept()
             await websocket.send_text(json.dumps({
                 "error": "AGENT_URL environment variable is not set"
@@ -325,9 +331,16 @@ async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str):
             await websocket.close()
             return
 
+        # Determine protocol based on environment
+        # Use ws:// for localhost, wss:// for remote
+        if "localhost" in AGENT_URL or "127.0.0.1" in AGENT_URL:
+            protocol = "ws"
+        else:
+            protocol = "wss"
+
         # Build remote URL
-        final_url = f"wss://{AGENT_URL}/ws/{user_id}?is_audio={is_audio}"
-        logger.debug(f"Connecting to agent URL: {final_url}")
+        final_url = f"{protocol}://{AGENT_URL}/ws/{user_id}?is_audio={is_audio}"
+        logger.info(f"Connecting to agent URL: {final_url}")
 
         # Create and start WebSocket handler
         websocket_handler = WebsocketHandler(user_id, is_audio, final_url, websocket)
@@ -336,13 +349,12 @@ async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str):
     except Exception as e:
         logger.error(f"WebSocket proxy error for user {user_id}: {e}")
         try:
-            if not websocket.client_state.CONNECTED:
+            # Fix the connection state checking bug
+            if websocket.client_state.name not in ["CONNECTED", "DISCONNECTED"]:
                 await websocket.accept()
             await websocket.send_text(json.dumps({
                 "error": f"Internal server error: {str(e)}"
             }))
             await websocket.close()
-        except Exception:
-            pass  # Connection might already be closed
-
-# Here will be a websocket built for the telnyx phone
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup: {cleanup_error}")

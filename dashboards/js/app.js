@@ -30,6 +30,16 @@ let websocket = null;
 let is_audio = false;
 let isClosing = false;
 
+// Connection resilience variables
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 10;
+let baseDelay = 1000; // Start with 1 second
+let maxDelay = 60000; // Cap at 60 seconds
+let circuitBreakerTimeout = 300000; // 5 minutes
+let isCircuitBreakerOpen = false;
+let lastConnectionAttempt = 0;
+let consecutiveFailures = 0;
+
 // Get DOM elements
 const messageForm = document.getElementById("messageForm");
 const messageInput = document.getElementById("message");
@@ -46,26 +56,52 @@ window.onbeforeunload = function() {
 
 // WebSocket handlers
 function connectWebsocket() {
-  // reset closing flag
-  isClosing = false;
-
-  if (!userId) {
-      alert("User ID not found. Please log in.");
-      window.location.href = 'index.html';
+  // Check circuit breaker
+  if (isCircuitBreakerOpen) {
+    const timeSinceLastAttempt = Date.now() - lastConnectionAttempt;
+    if (timeSinceLastAttempt < circuitBreakerTimeout) {
+      console.log(`Circuit breaker open. Next attempt in ${Math.ceil((circuitBreakerTimeout - timeSinceLastAttempt) / 1000)} seconds`);
+      document.getElementById("messages").textContent = `Connection temporarily disabled. Retrying in ${Math.ceil((circuitBreakerTimeout - timeSinceLastAttempt) / 1000)} seconds...`;
+      setTimeout(connectWebsocket, 10000); // Check every 10 seconds
       return;
+    } else {
+      // Reset circuit breaker
+      isCircuitBreakerOpen = false;
+      consecutiveFailures = 0;
+      reconnectAttempts = 0;
+      console.log("Circuit breaker reset, attempting connection");
+    }
   }
 
-  const ws_url = `wss://${window.location.host}/agent/ws-proxy/${userId}?is_audio=${is_audio}`;
-  console.log("ws_url: " + ws_url)
+  // Reset closing flag
+  isClosing = false;
+  lastConnectionAttempt = Date.now();
+
+  if (!userId) {
+    alert("User ID not found. Please log in.");
+    window.location.href = 'index.html';
+    return;
+  }
+
+  const ws_url = `ws://${window.location.host}/agent/ws-proxy/${userId}?is_audio=${is_audio}`;
+  console.log("ws_url: " + ws_url);
+  console.log(`Connection attempt ${reconnectAttempts + 1}/${maxReconnectAttempts}`);
+
+  // Update UI with connection status
+  document.getElementById("messages").textContent = `Connecting... (attempt ${reconnectAttempts + 1})`;
 
   // Connect websocket
   websocket = new WebSocket(ws_url);
 
   // Handle connection open
   websocket.onopen = function () {
-    // Connection opened messages
     console.log("WebSocket connection opened.");
     document.getElementById("messages").textContent = "Connection opened";
+
+    // Reset connection tracking on success
+    reconnectAttempts = 0;
+    consecutiveFailures = 0;
+    isCircuitBreakerOpen = false;
 
     // Enable the Send button
     document.getElementById("sendButton").disabled = false;
@@ -74,12 +110,17 @@ function connectWebsocket() {
 
   // Handle incoming messages
   websocket.onmessage = function (event) {
-    // Parse the incoming message
     const message_from_server = JSON.parse(event.data);
     console.log("[AGENT TO CLIENT] ", message_from_server);
 
+    // Check for error messages and handle them
+    if (message_from_server.error) {
+      console.error("Server error:", message_from_server.error);
+      handleConnectionError(message_from_server.error);
+      return;
+    }
+
     // Check if the turn is complete
-    // if turn complete, add new message
     if (
       message_from_server.turn_complete &&
       message_from_server.turn_complete == true
@@ -126,26 +167,74 @@ function connectWebsocket() {
   };
 
   // Handle connection close
-  websocket.onclose = function () {
-    console.log("WebSocket connection closed.");
+  websocket.onclose = function (event) {
+    console.log("WebSocket connection closed.", event.code, event.reason);
     document.getElementById("sendButton").disabled = true;
-    document.getElementById("messages").textContent = "Connection closed";
     
-    // Do not reconnect if we are intentionally closing the connection
+    // Don't reconnect if we are intentionally closing
     if (isClosing) {
-        return;
+      document.getElementById("messages").textContent = "Connection closed";
+      return;
     }
 
-    setTimeout(function () {
-      console.log("Reconnecting...");
-      connectWebsocket();
-    }, 5000);
+    handleConnectionFailure();
   };
 
   websocket.onerror = function (e) {
     console.log("WebSocket error: ", e);
+    handleConnectionFailure();
   };
 }
+
+// Handle connection errors from server messages
+function handleConnectionError(errorMessage) {
+  console.error("Connection error:", errorMessage);
+  
+  // Check if it's a rate limiting error
+  if (errorMessage.includes("429") || errorMessage.includes("rate limit") ||
+      errorMessage.includes("Too many connection attempts") || 
+      errorMessage.includes("Service is busy")) {
+    // Force circuit breaker open for rate limiting
+    isCircuitBreakerOpen = true;
+    consecutiveFailures = 5; // Trigger circuit breaker
+    console.log("Server-side rate limiting detected, opening circuit breaker");
+    document.getElementById("messages").textContent = errorMessage;
+    return; // Don't call handleConnectionFailure to avoid immediate retry
+  }
+  
+  handleConnectionFailure();
+}
+
+// Handle connection failures with exponential backoff and circuit breaker
+function handleConnectionFailure() {
+  consecutiveFailures++;
+  reconnectAttempts++;
+
+  // Open circuit breaker after too many consecutive failures
+  if (consecutiveFailures >= 5) {
+    isCircuitBreakerOpen = true;
+    console.log("Circuit breaker opened due to consecutive failures");
+    document.getElementById("messages").textContent = "Connection issues detected. Pausing reconnection attempts...";
+    setTimeout(connectWebsocket, circuitBreakerTimeout);
+    return;
+  }
+
+  // Stop trying after max attempts
+  if (reconnectAttempts >= maxReconnectAttempts) {
+    console.log("Max reconnection attempts reached");
+    document.getElementById("messages").textContent = "Connection failed. Please refresh the page to try again.";
+    return;
+  }
+
+  // Calculate exponential backoff delay
+  const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts - 1), maxDelay);
+  
+  console.log(`Reconnecting in ${delay / 1000} seconds... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+  document.getElementById("messages").textContent = `Connection lost. Reconnecting in ${delay / 1000} seconds...`;
+
+  setTimeout(connectWebsocket, delay);
+}
+
 connectWebsocket();
 
 // Add submit handler to the form
@@ -208,7 +297,10 @@ import { startAudioRecorderWorklet } from "./audio-recorder.js";
 
 // Start audio
 function startAudio() {
+  // Reset connection state when starting audio
+  isClosing = false;
   isRecording = true;
+  
   // Start audio output
   startAudioPlayerWorklet().then(([node, ctx]) => {
     audioPlayerNode = node;
@@ -230,6 +322,13 @@ const startAudioButton = document.getElementById("startAudioButton");
 startAudioButton.addEventListener("click", () => {
   startAudioButton.disabled = true;
   stopAudioButton.disabled = false;
+  
+  // Reset connection state before starting audio
+  isClosing = false;
+  reconnectAttempts = 0;
+  consecutiveFailures = 0;
+  isCircuitBreakerOpen = false;
+  
   startAudio();
   is_audio = true;
   connectWebsocket(); // reconnect with the audio mode
