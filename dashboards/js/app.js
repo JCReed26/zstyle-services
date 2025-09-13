@@ -29,6 +29,7 @@ const userId = urlParams.get('user_id');
 let websocket = null;
 let is_audio = false;
 let isClosing = false;
+let isConnecting = false; // Prevent multiple simultaneous connections
 
 // Connection resilience variables
 let reconnectAttempts = 0;
@@ -39,6 +40,7 @@ let circuitBreakerTimeout = 300000; // 5 minutes
 let isCircuitBreakerOpen = false;
 let lastConnectionAttempt = 0;
 let consecutiveFailures = 0;
+let reconnectTimer = null; // Track reconnection timer
 
 // Get DOM elements
 const messageForm = document.getElementById("messageForm");
@@ -56,13 +58,20 @@ window.onbeforeunload = function() {
 
 // WebSocket handlers
 function connectWebsocket() {
+  // Prevent multiple simultaneous connections
+  if (isConnecting) {
+    console.log("Connection already in progress, skipping");
+    return;
+  }
+
   // Check circuit breaker
   if (isCircuitBreakerOpen) {
     const timeSinceLastAttempt = Date.now() - lastConnectionAttempt;
     if (timeSinceLastAttempt < circuitBreakerTimeout) {
       console.log(`Circuit breaker open. Next attempt in ${Math.ceil((circuitBreakerTimeout - timeSinceLastAttempt) / 1000)} seconds`);
       document.getElementById("messages").textContent = `Connection temporarily disabled. Retrying in ${Math.ceil((circuitBreakerTimeout - timeSinceLastAttempt) / 1000)} seconds...`;
-      setTimeout(connectWebsocket, 10000); // Check every 10 seconds
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connectWebsocket, 10000); // Check every 10 seconds
       return;
     } else {
       // Reset circuit breaker
@@ -73,40 +82,64 @@ function connectWebsocket() {
     }
   }
 
-  // Reset closing flag
+  // Clear any existing reconnect timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  // Close existing connection if it exists
+  if (websocket && websocket.readyState !== WebSocket.CLOSED) {
+    console.log("Closing existing connection before creating new one");
+    isClosing = true;
+    websocket.close();
+    websocket = null;
+  }
+
+  // Reset flags
   isClosing = false;
+  isConnecting = true;
   lastConnectionAttempt = Date.now();
 
   if (!userId) {
     alert("User ID not found. Please log in.");
     window.location.href = 'index.html';
+    isConnecting = false;
     return;
   }
 
-  const ws_url = `ws://${window.location.host}/agent/ws-proxy/${userId}?is_audio=${is_audio}`;
+  const ws_url = `ws://${window.location.host}/agent/ws/${userId}?is_audio=${is_audio}`;
   console.log("ws_url: " + ws_url);
   console.log(`Connection attempt ${reconnectAttempts + 1}/${maxReconnectAttempts}`);
 
   // Update UI with connection status
   document.getElementById("messages").textContent = `Connecting... (attempt ${reconnectAttempts + 1})`;
 
-  // Connect websocket
-  websocket = new WebSocket(ws_url);
+  try {
+    // Connect websocket
+    websocket = new WebSocket(ws_url);
 
-  // Handle connection open
-  websocket.onopen = function () {
-    console.log("WebSocket connection opened.");
-    document.getElementById("messages").textContent = "Connection opened";
+    // Handle connection open
+    websocket.onopen = function () {
+      console.log("WebSocket connection opened.");
+      document.getElementById("messages").textContent = "Connection opened";
+      isConnecting = false;
 
-    // Reset connection tracking on success
-    reconnectAttempts = 0;
-    consecutiveFailures = 0;
-    isCircuitBreakerOpen = false;
+      // Reset connection tracking on success
+      reconnectAttempts = 0;
+      consecutiveFailures = 0;
+      isCircuitBreakerOpen = false;
 
-    // Enable the Send button
-    document.getElementById("sendButton").disabled = false;
-    addSubmitHandler();
-  };
+      // Enable the Send button
+      document.getElementById("sendButton").disabled = false;
+      addSubmitHandler();
+    };
+  } catch (error) {
+    console.error("Error creating WebSocket:", error);
+    isConnecting = false;
+    handleConnectionFailure();
+    return;
+  }
 
   // Handle incoming messages
   websocket.onmessage = function (event) {
@@ -170,6 +203,7 @@ function connectWebsocket() {
   websocket.onclose = function (event) {
     console.log("WebSocket connection closed.", event.code, event.reason);
     document.getElementById("sendButton").disabled = true;
+    isConnecting = false;
     
     // Don't reconnect if we are intentionally closing
     if (isClosing) {
@@ -182,6 +216,7 @@ function connectWebsocket() {
 
   websocket.onerror = function (e) {
     console.log("WebSocket error: ", e);
+    isConnecting = false;
     handleConnectionFailure();
   };
 }
@@ -210,12 +245,18 @@ function handleConnectionFailure() {
   consecutiveFailures++;
   reconnectAttempts++;
 
+  // Clear any existing reconnect timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   // Open circuit breaker after too many consecutive failures
   if (consecutiveFailures >= 5) {
     isCircuitBreakerOpen = true;
     console.log("Circuit breaker opened due to consecutive failures");
     document.getElementById("messages").textContent = "Connection issues detected. Pausing reconnection attempts...";
-    setTimeout(connectWebsocket, circuitBreakerTimeout);
+    reconnectTimer = setTimeout(connectWebsocket, circuitBreakerTimeout);
     return;
   }
 
@@ -232,7 +273,7 @@ function handleConnectionFailure() {
   console.log(`Reconnecting in ${delay / 1000} seconds... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
   document.getElementById("messages").textContent = `Connection lost. Reconnecting in ${delay / 1000} seconds...`;
 
-  setTimeout(connectWebsocket, delay);
+  reconnectTimer = setTimeout(connectWebsocket, delay);
 }
 
 connectWebsocket();

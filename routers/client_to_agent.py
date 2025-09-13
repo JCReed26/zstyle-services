@@ -1,5 +1,5 @@
 """
-Enhanced WebSocket Proxy for Agent Connect Server
+Simple WebSocket Proxy for Agent Connect Server
 """
 
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter
@@ -7,14 +7,12 @@ import websockets
 import asyncio
 import os
 import json
-import time
-from typing import Optional
-from collections import defaultdict
 from dotenv import load_dotenv
-
 import logging
+import time
+from typing import Dict, Set
 
-# Initialize logging with Google Cloud fallback
+# Initialize logging
 logger = logging.getLogger("agent-connect-server.client_to_agent")
 logger.setLevel(logging.INFO)
 
@@ -26,21 +24,21 @@ try:
     logging_client = Client()
     handler = CloudLoggingHandler(logging_client)
     logger.addHandler(handler)
-    logger.info("Google Cloud Logging initialized successfully for client_to_agent router")
+    logger.info("Google Cloud Logging initialized successfully")
 except Exception as e:
     # Fallback to standard logging for local development
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    logger.warning(f"Using standard logging for client_to_agent router (Google Cloud Logging unavailable): {e}")
+    logger.warning(f"Using standard logging (Google Cloud Logging unavailable): {e}")
 
 load_dotenv()
 
-# Get AGENT_URL from environment or use localhost default for development
+# Get AGENT_URL from environment
 AGENT_URL = os.getenv("AGENT_URL", "localhost:5000")
 
-# Remove any protocol prefix if present and clean the URL
+# Clean the URL
 if AGENT_URL.startswith("http://"):
     AGENT_URL = AGENT_URL[7:]
 elif AGENT_URL.startswith("https://"):
@@ -54,307 +52,178 @@ logger.info(f"Agent URL configured as: {AGENT_URL}")
 
 router = APIRouter(prefix="/agent")
 
-# Connection timeouts and limits
-CONNECTION_TIMEOUT = 30  # seconds
-MAX_CONNECTIONS_PER_USER = 3
+# Connection tracking for deduplication and rate limiting
+active_connections: Dict[str, WebSocket] = {}
+connection_attempts: Dict[str, list] = {}
+RATE_LIMIT_WINDOW = 60  # 1 minute
+MAX_CONNECTIONS_PER_MINUTE = 10
 
-class RateLimiter:
-    """Rate limiter to prevent connection storms per user"""
-    def __init__(self, max_attempts: int = 3, window_seconds: int = 60):
-        self.max_attempts = max_attempts
-        self.window_seconds = window_seconds
-        self.attempts: dict[str, list] = defaultdict(list)
-    
-    def is_allowed(self, user_id: str) -> bool:
-        now = time.time()
-        # Clean old attempts
-        self.attempts[user_id] = [
-            attempt_time for attempt_time in self.attempts[user_id]
-            if now - attempt_time < self.window_seconds
-        ]
-        
-        if len(self.attempts[user_id]) >= self.max_attempts:
-            return False
-        
-        self.attempts[user_id].append(now)
-        return True
-
-class ConnectionManager:
-    """Manages active WebSocket connections per user"""
-    def __init__(self):
-        self.active_connections: dict[str, set] = {}
-
-    def add_connection(self, user_id: str, handler: 'WebsocketHandler'):
-        if user_id not in self.active_connections:
-            self.active_connections[user_id] = set()
-        self.active_connections[user_id].add(handler)
-
-    def remove_connection(self, user_id: str, handler: 'WebsocketHandler'):
-        if user_id in self.active_connections:
-            self.active_connections[user_id].discard(handler)
-            if not self.active_connections[user_id]:
-                del self.active_connections[user_id]
-
-    def get_user_connection_count(self, user_id: str) -> int:
-        return len(self.active_connections.get(user_id, set()))
-
-# Global connection manager and rate limiter
-connection_manager = ConnectionManager()
-rate_limiter = RateLimiter(max_attempts=3, window_seconds=60)
-
-class WebsocketHandler:
-    def __init__(self, user_id: str, is_audio: str, remote_url: str, client_ws: WebSocket):
-        self.user_id = user_id
-        self.is_audio = is_audio
-        self.remote_url = remote_url
-        self.client_ws = client_ws
-        self.remote_ws: Optional[websockets.WebSocketClientProtocol] = None
-        self._running = True
-
-    async def connect(self):
-        """Main connection handler with proper cleanup"""
-        try:
-            # Check connection limits
-            if connection_manager.get_user_connection_count(self.user_id) >= MAX_CONNECTIONS_PER_USER:
-                await self.client_ws.accept()
-                await self.client_ws.send_text(json.dumps({
-                    "error": "Maximum connections exceeded for user"
-                }))
-                await self.client_ws.close()
-                return
-
-            await self.client_ws.accept()
-            connection_manager.add_connection(self.user_id, self)
-
-            logger.info(f"Accepted client connection for user {self.user_id}")
-            logger.info(f"Attempting to connect to remote: {self.remote_url}")
-
-            # Connect to remote with timeout
-            try:
-                self.remote_ws = await asyncio.wait_for(
-                    websockets.connect(
-                        self.remote_url,
-                    ),
-                    timeout=CONNECTION_TIMEOUT
-                )
-                logger.info(f"Successfully connected to remote agent for user {self.user_id}")
-            except asyncio.TimeoutError:
-                logger.error(f"Connection timeout to remote for user {self.user_id}")
-                await self.client_ws.send_text(json.dumps({
-                    "error": "Agent service temporarily unavailable. Please try again in a few minutes."
-                }))
-                return
-            except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg or "rate limit" in error_msg.lower():
-                    logger.error(f"Rate limited by agent service for user {self.user_id}")
-                    await self.client_ws.send_text(json.dumps({
-                        "error": "Service is busy. Please wait a few minutes before trying again."
-                    }))
-                else:
-                    logger.error(f"Failed to connect to remote for user {self.user_id}: {e}")
-                    await self.client_ws.send_text(json.dumps({
-                        "error": "Unable to connect to agent service. Please try again later."
-                    }))
-                return
-
-            # Start bidirectional streaming
-            tasks = [
-                asyncio.create_task(self._client_to_remote()),
-                asyncio.create_task(self._remote_to_client())
-            ]
-            
-            try:
-                # Wait for either task to complete (indicating connection closed)
-                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                
-                # Cancel remaining tasks
-                for task in pending:
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
-                
-                # Check for exceptions in completed tasks
-                for task in done:
-                    try:
-                        await task
-                    except Exception as e:
-                        logger.error(f"Task error for user {self.user_id}: {e}")
-                        
-            except Exception as e:
-                logger.error(f"Error in bidirectional streaming for user {self.user_id}: {e}")
-
-        except Exception as e:
-            logger.error(f"Connection error for user {self.user_id}: {e}")
-        finally:
-            await self._cleanup()
-
-    async def _client_to_remote(self):
-        """Handle messages from client to remote agent"""
-        try:
-            while self._running and self.remote_ws:
-                try:
-                    # Receive message from client
-                    message = await self.client_ws.receive_text()
-                    
-                    # Forward to remote agent
-                    await self.remote_ws.send(message)
-                    logger.debug(f"Forwarded message from client {self.user_id} to agent")
-
-                except WebSocketDisconnect:
-                    logger.info(f"Client {self.user_id} disconnected")
-                    break
-                except Exception as e:
-                    logger.error(f"Error in client-to-remote for user {self.user_id}: {e}")
-                    break
-
-        except Exception as e:
-            logger.error(f"Client-to-remote task error for user {self.user_id}: {e}")
-        finally:
-            self._running = False
-
-    async def _remote_to_client(self):
-        """Handle messages from remote agent to client"""
-        try:
-            while self._running and self.remote_ws:
-                try:
-                    # Receive message from remote agent
-                    message = await self.remote_ws.recv()
-                    
-                    # Forward to client
-                    if isinstance(message, str):
-                        await self.client_ws.send_text(message)
-                    else:
-                        await self.client_ws.send_bytes(message)
-                    
-                    logger.debug(f"Forwarded message from agent to client {self.user_id}")
-
-                except websockets.exceptions.ConnectionClosed:
-                    logger.info(f"Remote connection closed for user {self.user_id}")
-                    break
-                except Exception as e:
-                    logger.error(f"Error in remote-to-client for user {self.user_id}: {e}")
-                    break
-
-        except Exception as e:
-            logger.error(f"Remote-to-client task error for user {self.user_id}: {e}")
-        finally:
-            self._running = False
-
-    async def _cleanup(self):
-        """Clean up resources"""
-        self._running = False
-
-        # Remove from connection manager
-        connection_manager.remove_connection(self.user_id, self)
-
-        # Close connections
-        try:
-            if self.remote_ws:
-                await self.remote_ws.close()
-        except Exception as e:
-            logger.debug(f"Error closing remote websocket: {e}")
-
-        try:
-            # Check if client websocket is still connected before closing
-            if hasattr(self.client_ws, 'client_state') and self.client_ws.client_state.name not in ["DISCONNECTED", "CONNECTING"]:
-                await self.client_ws.close()
-        except Exception as e:
-            logger.debug(f"Error closing client websocket: {e}")
-
-        logger.info(f"Cleaned up connection for user {self.user_id}")
-
-# Health check endpoint for monitoring
-@router.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring WebSocket proxy status"""
-    return {
-        "status": "healthy",
-        "service": "websocket-proxy",
-        "agent_url": AGENT_URL,
-        "active_connections": sum(len(connections) for connections in connection_manager.active_connections.values()),
-        "users_connected": len(connection_manager.active_connections)
-    }
-
-# Connection status endpoint
-@router.get("/connections/{user_id}")
-async def get_user_connections(user_id: str):
-    """Get connection status for a specific user"""
-    count = connection_manager.get_user_connection_count(user_id)
-    return {
-        "user_id": user_id,
-        "active_connections": count,
-        "max_connections": MAX_CONNECTIONS_PER_USER
-    }
-
-# All UIs will connect through this proxy websocket
-@router.websocket("/ws-proxy/{user_id}")
-async def websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str = "false"):
-    """Main WebSocket proxy endpoint with enhanced error handling"""
+async def forward_client_to_agent(client_ws: WebSocket, agent_ws):
+    """Forward messages from client to agent"""
     try:
-        logger.info(f"User {user_id} is connecting (audio: {is_audio})...")
+        while True:
+            message = await client_ws.receive_text()
+            await agent_ws.send(message)
+            logger.debug("Forwarded message from client to agent")
+    except WebSocketDisconnect:
+        logger.info("Client disconnected")
+    except Exception as e:
+        logger.error(f"Error forwarding client to agent: {e}")
 
-        # Check rate limiting first
-        if not rate_limiter.is_allowed(user_id):
-            await websocket.accept()
-            await websocket.send_text(json.dumps({
-                "error": "Too many connection attempts. Please wait before retrying."
-            }))
-            await websocket.close()
-            logger.warning(f"Rate limited user {user_id}")
+async def forward_agent_to_client(agent_ws, client_ws: WebSocket):
+    """Forward messages from agent to client"""
+    try:
+        while True:
+            message = await agent_ws.recv()
+            if isinstance(message, str):
+                await client_ws.send_text(message)
+            else:
+                await client_ws.send_bytes(message)
+            logger.debug("Forwarded message from agent to client")
+    except websockets.exceptions.ConnectionClosed:
+        logger.info("Agent connection closed")
+    except Exception as e:
+        logger.error(f"Error forwarding agent to client: {e}")
+
+def check_rate_limit(user_id: str) -> bool:
+    """Check if user is within rate limits"""
+    current_time = time.time()
+    
+    # Clean old attempts
+    if user_id in connection_attempts:
+        connection_attempts[user_id] = [
+            attempt_time for attempt_time in connection_attempts[user_id]
+            if current_time - attempt_time < RATE_LIMIT_WINDOW
+        ]
+    else:
+        connection_attempts[user_id] = []
+    
+    # Check rate limit
+    if len(connection_attempts[user_id]) >= MAX_CONNECTIONS_PER_MINUTE:
+        return False
+    
+    # Record this attempt
+    connection_attempts[user_id].append(current_time)
+    return True
+
+@router.websocket("/ws/{user_id}")
+async def simple_websocket_proxy(websocket: WebSocket, user_id: str, is_audio: str = "false"):
+    """Simple WebSocket proxy - direct connection to agent"""
+    agent_ws = None
+    try:
+        logger.info(f"User {user_id} connecting (audio: {is_audio})")
+        
+        # Check rate limiting before accepting connection
+        if not check_rate_limit(user_id):
+            logger.warning(f"Rate limit exceeded for user {user_id}")
+            await websocket.close(code=1008, reason="Too many connection attempts")
             return
+        
+        # Check for existing connection
+        if user_id in active_connections:
+            logger.warning(f"Duplicate connection attempt for user {user_id}, closing existing")
+            try:
+                existing_ws = active_connections[user_id]
+                await existing_ws.close(code=1000, reason="New connection established")
+            except:
+                pass
+            finally:
+                del active_connections[user_id]
+        
+        # Accept client connection
+        await websocket.accept()
+        logger.info(f"Accepted connection for user {user_id}")
+        
+        # Track this connection
+        active_connections[user_id] = websocket
 
-        # Validate inputs
-        if not user_id or len(user_id) > 100:  # Reasonable limit
-            await websocket.accept()
-            await websocket.send_text(json.dumps({
-                "error": "Invalid user_id"
-            }))
-            await websocket.close()
-            return
-
-        if is_audio not in ["true", "false"]:
-            await websocket.accept()
-            await websocket.send_text(json.dumps({
-                "error": "Invalid is_audio parameter"
-            }))
-            await websocket.close()
-            return
-
-        if not AGENT_URL:
-            await websocket.accept()
-            await websocket.send_text(json.dumps({
-                "error": "AGENT_URL environment variable is not set"
-            }))
-            await websocket.close()
-            return
-
-        # Determine protocol based on environment
-        # Use ws:// for localhost, wss:// for remote
+        # Determine protocol
         if "localhost" in AGENT_URL or "127.0.0.1" in AGENT_URL:
             protocol = "ws"
         else:
             protocol = "wss"
 
-        # Build remote URL
-        final_url = f"{protocol}://{AGENT_URL}/ws/{user_id}?is_audio={is_audio}"
-        logger.info(f"Connecting to agent URL: {final_url}")
+        # Connect to agent with retry logic
+        agent_url = f"{protocol}://{AGENT_URL}/ws/{user_id}?is_audio={is_audio}"
+        logger.info(f"Connecting to agent: {agent_url}")
+        
+        try:
+            agent_ws = await asyncio.wait_for(
+                websockets.connect(agent_url),
+                timeout=30
+            )
+            logger.info(f"Connected to agent for user {user_id}")
+        except websockets.exceptions.InvalidStatusCode as e:
+            if e.status_code == 429:
+                logger.error(f"Agent rate limited for user {user_id}")
+                await websocket.send_text(json.dumps({
+                    "error": "server rejected WebSocket connection: HTTP 429"
+                }))
+                return
+            else:
+                raise
 
-        # Create and start WebSocket handler
-        websocket_handler = WebsocketHandler(user_id, is_audio, final_url, websocket)
-        await websocket_handler.connect()
+        # Start bidirectional forwarding
+        await asyncio.gather(
+            forward_client_to_agent(websocket, agent_ws),
+            forward_agent_to_client(agent_ws, websocket),
+            return_exceptions=True
+        )
 
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout connecting to agent for user {user_id}")
+        try:
+            await websocket.send_text(json.dumps({
+                "error": "Agent service temporarily unavailable"
+            }))
+        except:
+            pass
+    except websockets.exceptions.InvalidStatusCode as e:
+        if e.status_code == 429:
+            logger.error(f"WebSocket proxy error for user {user_id}: server rejected WebSocket connection: HTTP 429")
+            try:
+                await websocket.send_text(json.dumps({
+                    "error": "server rejected WebSocket connection: HTTP 429"
+                }))
+            except:
+                pass
+        else:
+            logger.error(f"WebSocket proxy error for user {user_id}: {e}")
+            try:
+                await websocket.send_text(json.dumps({
+                    "error": f"server rejected WebSocket connection: HTTP {e.status_code}"
+                }))
+            except:
+                pass
     except Exception as e:
         logger.error(f"WebSocket proxy error for user {user_id}: {e}")
         try:
-            # Fix the connection state checking bug
-            if websocket.client_state.name not in ["CONNECTED", "DISCONNECTED"]:
-                await websocket.accept()
             await websocket.send_text(json.dumps({
-                "error": f"Internal server error: {str(e)}"
+                "error": "Connection error"
             }))
+        except:
+            pass
+    finally:
+        # Cleanup
+        if user_id in active_connections:
+            del active_connections[user_id]
+        
+        if agent_ws:
+            try:
+                await agent_ws.close()
+            except:
+                pass
+        try:
             await websocket.close()
-        except Exception as cleanup_error:
-            logger.error(f"Error during cleanup: {cleanup_error}")
+        except:
+            pass
+        logger.info(f"Cleaned up connection for user {user_id}")
+
+@router.get("/health")
+async def health_check():
+    """Simple health check"""
+    return {
+        "status": "healthy",
+        "service": "simple-websocket-proxy",
+        "agent_url": AGENT_URL
+    }
