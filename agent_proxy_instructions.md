@@ -21,11 +21,12 @@ gcloud config set project totemic-phoenix-468400-j5
 ### 2. Start the Proxy
 ```bash
 # Replace [YOUR_SERVICE_REGION] with your service region (e.g., us-central1)
-gcloud run services proxy zstyle --project totemic-phoenix-468400-j5 --port 8080 --region [YOUR_SERVICE_REGION]
+gcloud run services proxy zstyle --project totemic-phoenix-468400-j5 --port 5000 --region [YOUR_SERVICE_REGION]
 ```
 
 ### 3. Access Your Service
-- Open browser: `http://localhost:8080`
+- Creates a proxy window in powershell (or terminal) when closed the proxy connection closes with it
+- Open browser: `http://localhost:5000`
 - Use in development tools: Postman, curl, local applications
 - All requests are automatically authenticated and forwarded
 
@@ -35,7 +36,19 @@ gcloud run services proxy zstyle --project totemic-phoenix-468400-j5 --port 8080
 ✅ **Local Only**: Accessible only from your machine  
 ✅ **No Public Exposure**: Service remains private  
 
-# Alternative: Temporary Public Access
+# Troubleshooting
+
+**Port in use?** Change `--port 5000` to another port (e.g., `--port 5050`)
+
+**Permission denied?** Ensure your account has "Cloud Run Invoker" role
+
+**Wrong project?** Verify with `gcloud config list project`
+
+---
+
+**Recommendation**: Always use the proxy method for local development. It's secure, easy, and handles authentication automatically.
+
+## Alternative: Temporary Public Access
 
 ⚠️ **Use with extreme caution and only when absolutely necessary**
 
@@ -59,15 +72,3 @@ gcloud run services proxy zstyle --project totemic-phoenix-468400-j5 --port 8080
 ### Why Revert?
 - **Security Risk**: Exposes service to potential exploits
 - **Cost Risk**: Unexpected traffic charges
-
-## Troubleshooting
-
-**Port in use?** Change `--port 8080` to another port (e.g., `--port 8000`)
-
-**Permission denied?** Ensure your account has "Cloud Run Invoker" role
-
-**Wrong project?** Verify with `gcloud config list project`
-
----
-
-**Recommendation**: Always use the proxy method for local development. It's secure, easy, and handles authentication automatically.

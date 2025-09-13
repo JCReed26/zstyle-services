@@ -1,4 +1,3 @@
-
 # Agent Connect Server
 
 This project is a Python-based server that connects to and manages multiple AI agents. It provides a central backend for handling agent interactions, user authentication, and data persistence.
@@ -11,43 +10,28 @@ This project is a Python-based server that connects to and manages multiple AI a
 - **/frontend**: Contains the user interface files for interacting with the agents.
 - **/routers**: Defines the API routes and request handlers for the server.
 
-## Running the Application
+## Local Development Setup
 
-This application is built with FastAPI and can be run with uvicorn.
+### 1. Agent Proxy Setup
 
-### Prerequisites
+For connecting to agent services during development, follow the [Agent Proxy Instructions](./agent_proxy_instructions.md) guide.
 
-- Python 3.11+
-- pip
+### 2. Environment Configuration
 
-### Steps
+Copy the example environment file and configure your local settings:
+```bash
+cp .env.example .env
+```
+Edit the `.env` file with your local configuration values.
 
-1. **Install Dependencies**:
+### 3. Docker Compose
 
-   From the root directory, run the following command to install the required dependencies:
+Build and run the application:
+```bash
+docker-compose up --build
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Run the Server**:
-
-   From the root directory, run the following command to start the server:
-
-   ```bash
-   uvicorn main:app --reload
-   ```
-
-   This will start the backend server at `http://localhost:8000`.
-
-3. **Docker Run**:
-
-   from the root directory run 
-   '''bash
-   docker build -t agent-connect-server . && docker run -p 8000:8000 agent-connect-server
-   '''
-
-   This will start the backend server at 'http://0.0.0.0:8000/'.
+The server will be available at `http://localhost:8080`
 
 ## Deploying Application Updates to Production
 
@@ -87,4 +71,3 @@ For a detailed overview of the infrastructure, see the [Terraform Infrastructure
     cd infra/
     terraform plan  # Review the planned changes
     terraform apply # Apply the update
-    ```
