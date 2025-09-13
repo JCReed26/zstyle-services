@@ -1,9 +1,9 @@
-fastapi 
+fastapi
 uvicorn
+gunicorn
 pymongo
 python-dotenv
 passlib[bcrypt]
 pydantic[email]
-google-generativeai
-google-genai
 google-cloud-logging
+websockets

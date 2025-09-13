@@ -11,22 +11,36 @@ from typing import Optional
 from dotenv import load_dotenv
 
 import logging
-from google.cloud.logging import Client
-from google.cloud.logging.handlers import CloudLoggingHandler
 
-logging_client = Client()
-handler = CloudLoggingHandler(logging_client)
+# Initialize logging with Google Cloud fallback
 logger = logging.getLogger("agent-connect-server.client_to_agent")
 logger.setLevel(logging.INFO)
-logger.addHandler(handler)
+
+# Try to initialize Google Cloud Logging, fall back to standard logging
+try:
+    from google.cloud.logging import Client
+    from google.cloud.logging.handlers import CloudLoggingHandler
+    
+    logging_client = Client()
+    handler = CloudLoggingHandler(logging_client)
+    logger.addHandler(handler)
+    logger.info("Google Cloud Logging initialized successfully for client_to_agent router")
+except Exception as e:
+    # Fallback to standard logging for local development
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.warning(f"Using standard logging for client_to_agent router (Google Cloud Logging unavailable): {e}")
 
 load_dotenv()
 
 #AGENT_URL = "ws://localhost:3000/" # Local Agent WebSocket URL
 AGENT_URL = os.getenv("AGENT_URL") # GCP Secret WebSocket URL
 
+# For local development, AGENT_URL can be None - we'll handle this in the websocket endpoint
 if not AGENT_URL:
-    raise RuntimeError("AGENT_URL environment variable is not set.")
+    logger.warning("AGENT_URL environment variable is not set - WebSocket proxy will not work until configured")
 
 router = APIRouter(prefix="/agent")
 

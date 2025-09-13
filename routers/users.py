@@ -6,14 +6,28 @@ from database.schema import User, UserCreate, UserLogin
 from auth import verify_password
 from typing import List
 import logging
-from google.cloud.logging import Client
-from google.cloud.logging.handlers import CloudLoggingHandler
+import os
 
-logging_client = Client()
-handler = CloudLoggingHandler(logging_client)
+# Initialize logging with Google Cloud fallback
 logger = logging.getLogger("agent-connect-server.users")
 logger.setLevel(logging.INFO)
-logger.addHandler(handler)
+
+# Try to initialize Google Cloud Logging, fall back to standard logging
+try:
+    from google.cloud.logging import Client
+    from google.cloud.logging.handlers import CloudLoggingHandler
+    
+    logging_client = Client()
+    handler = CloudLoggingHandler(logging_client)
+    logger.addHandler(handler)
+    logger.info("Google Cloud Logging initialized successfully for users router")
+except Exception as e:
+    # Fallback to standard logging for local development
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.warning(f"Using standard logging for users router (Google Cloud Logging unavailable): {e}")
 
 
 router = APIRouter(prefix="/user")

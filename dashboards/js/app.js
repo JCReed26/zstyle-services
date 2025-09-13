@@ -51,7 +51,7 @@ function connectWebsocket() {
 
   if (!userId) {
       alert("User ID not found. Please log in.");
-      window.location.href = 'login.html';
+      window.location.href = 'index.html';
       return;
   }
 
