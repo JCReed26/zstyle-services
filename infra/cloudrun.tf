@@ -30,6 +30,15 @@ resource "google_cloud_run_v2_service" "agent-connect-server" {
                 # e.g., "https://my-service-abc-uc.a.run.app" -> "my-service-abc-uc.a.run.app"
                 value = trimsuffix(replace(data.google_cloud_run_service.zstyle.status[0].url, "https://", ""), "/")
             }
+            env {
+                name = "MONGO_DB_URI"
+                value_source {
+                    secret_key_ref {
+                        secret  = var.mongo_db_uri_secret_id
+                        version = "latest"
+                    }
+                }
+            }
 
             ports { container_port = 8080 }
         }
@@ -39,14 +48,22 @@ resource "google_cloud_run_v2_service" "agent-connect-server" {
             egress = "ALL_TRAFFIC"
         }
     }
-
+    client_version = "NO_AUTHENTICATION"
     deletion_protection = false
 }
 
-# Allow proxy to call agent 
+# Allow proxy to call agent
 resource "google_cloud_run_service_iam_member" "agent_invoker" {
     location = var.region
     service = data.google_cloud_run_service.zstyle.name
     role = "roles/run.invoker"
+    member = "serviceAccount:${google_service_account.agent-connect-serverless.email}"
+}
+
+# Allow service account to access MongoDB URI secret
+resource "google_secret_manager_secret_iam_member" "mongo_db_uri_accessor" {
+    project = var.project_id
+    secret_id = var.mongo_db_uri_secret_id
+    role = "roles/secretmanager.secretAccessor"
     member = "serviceAccount:${google_service_account.agent-connect-serverless.email}"
 }

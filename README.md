@@ -52,7 +52,7 @@ For a detailed overview of the infrastructure, see the [Terraform Infrastructure
     # Replace <project-id>, <repo-name>, and <tag> with your values
     export IMAGE_URI="us-central1-docker.pkg.dev/<project-id>/<repo-name>/agent-connect-server:<tag>"
 
-    docker build -t $IMAGE_URI .
+    docker build --platform linux/amd64 -t $IMAGE_URI .
     docker push $IMAGE_URI
     ```
 

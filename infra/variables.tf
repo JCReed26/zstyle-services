@@ -55,3 +55,8 @@ variable "ssl_key_secret_id" {
     description = "The ID of the secret in Secret Manager containing the SSL private key PEM."
     type        = string
 }
+
+variable "mongo_db_uri_secret_id" {
+    description = "The ID of the secret in Secret Manager containing the MongoDB connection URI."
+    type        = string
+}
