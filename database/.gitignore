@@ -1,0 +1,18 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+
+.env
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+plan.tfplan
+*.tfvars
+*.auto.tfvars

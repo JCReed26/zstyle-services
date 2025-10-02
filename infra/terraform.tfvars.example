@@ -1,0 +1,42 @@
+# This is an example file. Copy it to 'terraform.tfvars' and fill in your values.
+# The 'terraform.tfvars' file is ignored by git and should NOT be committed.
+
+# GCP Project Configuration
+project_id = "totemic-phoenix-468400-j5"
+
+# Cloud Run Configuration
+# Example for an image in Artifact Registry
+cr_proxy_image        = "us-central1-docker.pkg.dev/totemic-phoenix-468400-j5/<repo>/agent-connect-server:latest"
+cr_agent_service_name = "zstyle" # The name of the existing agent service
+
+# Load Balancer and Domain Configuration
+lb_domain = "your.domain.com"
+
+# Secrets Configuration (from Google Secret Manager)
+# These should be the names (IDs) of the secrets you created in the previous step.
+ssl_cert_secret_id = "cf-origin-cert"
+ssl_key_secret_id  = "cf-origin-key"
+
+# Cloud Armor - Cloudflare IP Ranges
+# Get the up-to-date list from https://www.cloudflare.com/ips/
+cloudflare_ip_ranges = [
+  "103.31.4.0/22",
+  "103.22.200.0/22",
+  "131.0.72.0/22",
+  "104.16.0.0/13",
+  "103.21.244.0/22",
+  "141.101.64.0/18",
+  "108.162.192.0/18",
+  "104.24.0.0/14",
+  # ... and the rest of the IPv4 ranges
+]
+
+cloudflare_ip_ranges_two = [
+  "190.93.240.0/20",
+  "188.114.96.0/20",
+  "173.245.48.0/20",
+  "197.234.240.0/22",
+  "198.41.128.0/17",
+  "162.158.0.0/15",
+  "172.64.0.0/13",
+]
