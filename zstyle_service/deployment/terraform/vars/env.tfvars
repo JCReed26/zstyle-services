@@ -1,0 +1,11 @@
+staging_project_id = "diverge-staging"
+prod_project_id = "totemic-phoenix-468400-j5"
+cicd_runner_project_id = "totemic-phoenix-468400-j5"
+region = "us-central1"
+repository_name = "zstyle"
+repository_owner = "JCReed26"
+host_connection_name = "git-zstyle"
+create_cb_connection = true
+create_repository = true
+github_app_installation_id = "80141705"
+github_pat_secret_id = "git-zstyle-github-oauthtoken-3834de"
