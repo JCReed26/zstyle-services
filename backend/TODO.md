@@ -1,5 +1,5 @@
-1. Fix failed to init websocket due to page loading via https 
+1. sit here to debate why you shouldnt learn GO 
+2. think about refactoring to GO 
+3. Your alr restarted pretty much anyway
 
-2. For the love of god maybe some auth for users on the server 
-before 2. lets get a RN app up on testflight first
-
+4. Can use this for current old backend

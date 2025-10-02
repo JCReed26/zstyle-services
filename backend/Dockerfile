@@ -11,8 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your application code
 COPY . .
 
-EXPOSE 8080
+EXPOSE 8000
 
 # Command to run your application with Gunicorn (single worker for WebSocket support)
 # Use single worker with Gunicorn for WebSocket compatibility
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "120", "main:app", "--bind", "0.0.0.0:8080"]
+CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "120", "main:app", "--bind", "0.0.0.0:8000"]

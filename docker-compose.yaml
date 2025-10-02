@@ -1,0 +1,8 @@
+services:
+    zstyle:
+      port: 
+        5000
+
+    backend:
+      port: 
+        8000
