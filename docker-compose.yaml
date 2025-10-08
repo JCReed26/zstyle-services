@@ -1,8 +1,16 @@
 services:
-    zstyle_service:
-      port: 
-        8000
-
     backend:
-      port: 
-        8000
+      build: ./backend
+      port: 4000
+
+    web_frontend:
+      build: ./web-frontend
+      port: 3000
+      depends_on:
+        - backend
+
+    zstyle-live-websocket:
+      build: ./zstyle-live-websocket
+      port: 8000
+      depends_on:
+        - backend
