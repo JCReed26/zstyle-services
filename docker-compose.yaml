@@ -1,7 +1,7 @@
 services:
-    zstyle:
+    zstyle_service:
       port: 
-        5000
+        8000
 
     backend:
       port: 

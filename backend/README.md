@@ -1,4 +1,4 @@
-# Agent Connect Server
+# Agent Connect Server - To be Rewritten in GoLang
 
 This project is a Python-based server that connects to and manages multiple AI agents. It provides a central backend for handling agent interactions, user authentication, and data persistence.
 
