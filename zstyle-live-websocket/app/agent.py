@@ -31,10 +31,18 @@ from google_agents.gcal_toolset import calendar_agent
 from google_agents.gmail_toolset import gmail_agent
 from google_agents.gtasks_toolset import gtasks_agent
 
+# Langchain Agents 
+from langchain_agents.ticktick_agent import ticktick_agent
+
 
 root_agent = Agent(
     name="root_agent",
     model="gemini-live-2.5-flash-preview-native-audio-09-2025",
     instruction="You are a helpful AI assistant designed to provide accurate and useful information.",
-    tools=[AgentTool(calendar_agent), AgentTool(gmail_agent), AgentTool(gtasks_agent)],
+    tools=[
+        AgentTool(calendar_agent),
+        AgentTool(gmail_agent), 
+        AgentTool(gtasks_agent),
+        AgentTool(ticktick_agent)
+    ],
 )

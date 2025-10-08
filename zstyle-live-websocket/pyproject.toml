@@ -17,6 +17,9 @@ dependencies = [
     "fastapi~=0.115.8",
     "uvicorn~=0.34.0",
     "psycopg2-binary>=2.9.10,<3.0.0",
+    "ticktick-py",
+    "langchain",
+    "langgraph",
 ]
 
 requires-python = ">=3.10,<3.14"
