@@ -1,0 +1,5 @@
+google-adk
+fastapi
+websockets
+python-dotenv
+google-generativeai

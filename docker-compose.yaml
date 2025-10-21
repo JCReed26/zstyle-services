@@ -1,16 +1,27 @@
 services:
-    backend:
-      build: ./backend
-      port: 4000
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000" 
 
-    web_frontend:
-      build: ./web-frontend
-      port: 3000
-      depends_on:
-        - backend
+  web_frontend:
+    build: ./web_frontend
+    ports:
+      - "2000:2000"
+    expose:
+      - "2000"
 
-    zstyle-live-websocket:
-      build: ./zstyle-live-websocket
-      port: 8000
-      depends_on:
-        - backend
+  agents:
+    build: ./agents
+    expose: 
+      - "4312"
+
+  proxy:
+    image: nginx:alpine
+    depends_on:
+      - web_frontend
+      - agents
+    ports:
+      -  "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro

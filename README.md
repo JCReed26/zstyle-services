@@ -4,7 +4,48 @@
 
 # QuickStart
 
-'docker-compose down && docker-compose up --build'
+Run the stack (proxy + same-origin WS)
+
+Prerequisites
+    Docker and Docker Compose installed
+    Ports 80 (and optionally 443) available on your machine
+    The UI listens on port 2000 inside the web_frontend container; the agents WS listens on 4312 inside the agents container.
+    First-time setup
+    Ensure Nginx config is at nginx/conf.d/default.conf (path is important).
+    If you previously created ngnix/, rename to nginx/.
+
+Start
+> docker compose up --build
+Open http://localhost in your browser.
+
+How it routes
+UI: Nginx proxies / to web_frontend:2000.
+WebSocket: Nginx proxies /ws to agents:4312.
+
+Frontend WS URL
+    The frontend should use a same-origin WS URL: wss://<host>/ws (HTTPS) or ws://<host>/ws (HTTP).
+    In dev at http://localhost, that resolves to ws://localhost/ws.
+    If you set NEXT_PUBLIC_WS_URL, it will override and connect directly to that URL (e.g., ws://localhost:4312).
+
+React Native
+    Use the same endpoint as browsers when reachable: ws(s)://<your-machine-IP-or-domain>/ws.
+
+Local dev tips:
+    iOS Simulator: ws://localhost/ws
+    Android Emulator: ws://10.0.2.2/ws
+    Physical devices on same Wi‑Fi: ws://<your-laptop-LAN-IP>/ws
+    Off-LAN or mobile networks: deploy with TLS and use wss://<your-domain>/ws.
+
+
+Production
+Add TLS to Nginx (443) and update your DNS to point your domain to the host running the proxy.
+Browsers and RN should connect to wss://yourdomain.com/ws.
+
+Troubleshooting
+Nginx starts but 502 on /ws: ensure agents is up and listening on 0.0.0.0:4312 inside the container.
+UI loads but assets 404: confirm web_frontend actually serves on port 2000 and isn’t using a different port.
+CORS / mixed-content errors: on HTTPS, ensure the WS URL uses wss://; prefer same-origin (/ws) to avoid CORS.
+Windows firewall: allow inbound on port 80 when testing from devices on the LAN.
 
 # What is ZStyle?
 
