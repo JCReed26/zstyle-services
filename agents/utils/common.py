@@ -38,6 +38,7 @@ class BaseWebSocketServer:
 
     async def handle_client(self,websocket):
         """Handle new connection"""
+        logger.info("Incoming WS %s", websocket.path)
         client_id = id(websocket)
         logger.info(f"New client Connected: {client_id}")
 
