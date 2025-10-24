@@ -1,0 +1,11 @@
+*pycache*
+pycache*
+*pycache
+
+web_frontend
+
+.env
+
+.venv
+
+secrets/
