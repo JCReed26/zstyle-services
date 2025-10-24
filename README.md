@@ -1,53 +1,41 @@
 # ZStyle Web and Backend Services 
-> Note: zstyle-mobile-app is the repository for the mobile app that corresponds with this program 
-> as you will see currently as of writing this there is nothing in the web frontend
+> Note: zstyle-mobile-app is the repository for the mobile app that corresponds with this program  
+> Note: terraform is setup to work on MacOS and Linux
+> No web frontend yet -- use test endpoint in agents
 
-# QuickStart
+## QuickStart
 
-Run the stack (proxy + same-origin WS)
+1. Setup env variables
 
-Prerequisites
-    Docker and Docker Compose installed
-    Ports 80 (and optionally 443) available on your machine
-    The UI listens on port 2000 inside the web_frontend container; the agents WS listens on 4312 inside the agents container.
-    First-time setup
-    Ensure Nginx config is at nginx/conf.d/default.conf (path is important).
-    If you previously created ngnix/, rename to nginx/.
+  - Rename the `.env.example` file to `.env` and update the values with your own  
 
-Start
-> docker compose up --build
-Open http://localhost in your browser.
+  ```bash
+  cp .env.example .env
+  ```
 
-How it routes
-UI: Nginx proxies / to web_frontend:2000.
-WebSocket: Nginx proxies /ws to agents:4312.
+2. Start docker daemon and run command below
 
-Frontend WS URL
-    The frontend should use a same-origin WS URL: wss://<host>/ws (HTTPS) or ws://<host>/ws (HTTP).
-    In dev at http://localhost, that resolves to ws://localhost/ws.
-    If you set NEXT_PUBLIC_WS_URL, it will override and connect directly to that URL (e.g., ws://localhost:4312).
+  ```bash
+  docker-compose up --build
+  ```
 
-React Native
-    Use the same endpoint as browsers when reachable: ws(s)://<your-machine-IP-or-domain>/ws.
+  or
 
-Local dev tips:
-    iOS Simulator: ws://localhost/ws
-    Android Emulator: ws://10.0.2.2/ws
-    Physical devices on same Wi‑Fi: ws://<your-laptop-LAN-IP>/ws
-    Off-LAN or mobile networks: deploy with TLS and use wss://<your-domain>/ws.
+  MacOS/Linux:
+  ```bash
+  ./run_clean.sh
+  ```
 
+  Windows:
+  ```powershell
+  ./run_clean.ps1
+  ```
 
-Production
-Add TLS to Nginx (443) and update your DNS to point your domain to the host running the proxy.
-Browsers and RN should connect to wss://yourdomain.com/ws.
+## agents
+The zstyle system core. The main agent from the server on main is zstyle. currently with two agent tools for gcal and gmail due to these becoming 
+custom agents
 
-Troubleshooting
-Nginx starts but 502 on /ws: ensure agents is up and listening on 0.0.0.0:4312 inside the container.
-UI loads but assets 404: confirm web_frontend actually serves on port 2000 and isn’t using a different port.
-CORS / mixed-content errors: on HTTPS, ensure the WS URL uses wss://; prefer same-origin (/ws) to avoid CORS.
-Windows firewall: allow inbound on port 80 when testing from devices on the LAN.
-
-# What is ZStyle?
+### What is ZStyle?
 
 ZStyle is a lifestyle management app. Life throws service after service, app after app, yet remembering all of them what goes where etc. ZStyle helps to manage this by integrating as many regular daily use life as possible 
 ex. 
@@ -83,4 +71,4 @@ Put together tracking daily life never became easier
 
 ZStyle while an ochestrating personal assistant by function is a lifecoach(style) manager it ensures integrations of personal time for scrolling, reading, or for me this. It also encourages and focuses on trying to help the user enjoy time without technology, now that ZStyle can handle everything it encorages thigns like going on walk while listening to a podcast, disconnecting on days when you really dont need to do work.
 
-ZStyle looks to transform people
+ZStyle looks to create a world of looking up from devices and experience life

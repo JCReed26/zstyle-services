@@ -1,27 +1,11 @@
 services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000" 
-
-  web_frontend:
-    build: ./web_frontend
-    ports:
-      - "2000:2000"
-    expose:
-      - "2000"
-
   agents:
     build: ./agents
-    expose: 
-      - "4312"
-
-  proxy:
-    image: nginx:alpine
-    depends_on:
-      - web_frontend
-      - agents
     ports:
-      -  "80:80"
+      - "4000:4000"
+    env_file:
+      - ./agents/.env
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/adc.json
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./secrets/adc.json:/secrets/adc.json:ro

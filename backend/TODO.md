@@ -39,3 +39,12 @@ func main() {
     }
     fmt.Printf("version=%s\n", version)
 }
+
+basic web application
+package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("hello world")
+}
