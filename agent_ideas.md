@@ -1,15 +1,18 @@
 1. FOLLOW ISSUES
 
-
+Main Agent: ZStyle and executive life coach
 - Executive Function Personal Life Coach:
 Executive Function Coach and Occupational Therapist Tuned Chat Agent
     - job is to sort through queries, offer conversational help etc. 
     - ideally a grok model for reasoning to create systems and automate life.
 
-- Life Secretary (runs Ticktick, gmail, gcal): about organization and utilizing features within ticktick and notion that also get to connect with regular life things (google cal/apple calendar, apple reminders alarms, gmail/mail, etc.) easily fine-tune organizer 
-    - if this could connect with shortcuts in the phone to create its own shortcuts that would be lit.
-    - any changes actually (love it to use app usage data and create optimized phone screens)
+    - Life Secretary (runs Ticktick, gmail, gcal): about organization and utilizing features within ticktick and notion that also get to connect with regular life things (google cal/apple calendar, apple reminders alarms, gmail/mail, etc.) easily fine-tune organizer 
+        - if this could connect with shortcuts in the phone to create its own shortcuts that would be lit.
+        - any changes actually (love it to use app usage data and create optimized phone screens)
 
+    - Executive Function Systems Creator: for reasoning further to create, track, and optimize life systems through the main executive function orchestrator.
+
+A2A Agents:s
 EXTRA AGENTS (lifestyle and package-able agents): 
 - personal-trainer-agent (strava, apple fitness, )
 - nutrition-agent -> (is meal planner, dietitian, chooses safe foods, factor, meal kits)
@@ -26,4 +29,5 @@ EXTRA AGENTS (lifestyle and package-able agents):
 - curated-content-agent -> curate and collect the content you want to sort through unwanted fyp marketing (podcasts, spotify, youtube, tiktok)
 - phone-addition-agent -> (could be ios only) will mess with your phone to lock it, block apps, and get you unaddicted from your phone (this is ZSTYLE experience life)
 
+for when mobile-app if ever:
 - circles-agent -> can directly interact with circles feature to help users make more friends and do more things in their area

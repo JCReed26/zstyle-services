@@ -1,0 +1,9 @@
+agent-starter-pack
+google-adk
+fastapi
+uvicorn
+pydantic
+python-telegram-bot
+ticktick-py
+huggingface
+torch
