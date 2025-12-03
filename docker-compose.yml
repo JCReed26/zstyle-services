@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    container_name: zstyle_app
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+    volumes:
+      - ./client_secret.json:/app/client_secret.json:ro 
+      - ./zstyle.db:/app/zstyle.db
+
+  telegram-bot:
+    build: .
+    container_name: zstyle_telegram_bot
+    restart: always
+    command: python services/telegram_bot.py
+    env_file:
+      - .env
+    environment:
+      - AGENT_URL=http://app:8000
+    depends_on:
+      - app
+    volumes:
+      - ./zstyle.db:/app/zstyle.db # Share DB if needed, though mostly via API

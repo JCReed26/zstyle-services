@@ -1,12 +1,18 @@
-# TODO
+# Project TODOs
 
-always best to follow and in order
+## Core Infrastructure
+- [x] Database Models: User, Session, Credential tables defined
+- [x] FastAPI App: Bare bones ADK app setup in main.py
+- [x] Docker: Dockerfile and docker-compose.yml for deployment
+- [x] Database: SQLite integration working
 
-* [ ] 1. Create Simple Telegram Bot Wrapper and Test 
-* [ ] 2. Setup docker-compose with ngrok if need to for local
-* [ ] 3. Establish the database, bucket storage, etc to allow more to be added over time
-* [ ] 4. Ensure we can spin it up and down with new changes to database (like new integration token, new agent that needs a storage point for its users json, etc.)
-* [ ] 5. Telegram buttons for form approval send and receive back 
-* [ ] 6. Telegram can send agent and image/screenshot and the agent can analyze the data on the image (could also send nano-banana images and links to online memes it finds)
+## Agent Capabilities
+- [x] Google Calendar Tools: Implemented and functional
+- [x] Telegram Integration: MCP-based integration working
+- [ ] TickTick Integration: Need to add TickTick integration
 
-* [ ] 7. Chaos test -> send multiple messages, check thinking, google_search prod requirements?, security checks, CODE RABBIT & VantaAI & docs.adk.
+## Current Priority Tasks
+1. Add TickTick integration for task management
+2. Improve error handling in MCP tools
+3. Add more comprehensive testing
+4. Implement better credential management
