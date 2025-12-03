@@ -1,18 +1,16 @@
 # Project TODOs
 
 ## Core Infrastructure
-- [x] Database Models: User, Session, Credential tables defined
-- [x] FastAPI App: Bare bones ADK app setup in main.py
-- [x] Docker: Dockerfile and docker-compose.yml for deployment
-- [x] Database: SQLite integration working
+- [ ] Session Service: utilize built in session service manager
+- [ ] Credential Manager: for all auth tokens etc. 
+- [ ] Long-Term Memory Manger: just to be able to add points of knowledge for the user
+- [ ] Lock Down Telegram Bot Receive and MCP Send Flow
 
 ## Agent Capabilities
-- [x] Google Calendar Tools: Implemented and functional
-- [x] Telegram Integration: MCP-based integration working
-- [ ] TickTick Integration: Need to add TickTick integration
+- [ ] Google Calendar Tools: Implemented and functional built in tool with auth
+- [ ] TickTick Integration: Need to add TickTick integration create the tool with auth 
+- [ ] Notion Integration
+- [ ] Improve Telegram Integration: Audio, files, etc. 
 
-## Current Priority Tasks
-1. Add TickTick integration for task management
-2. Improve error handling in MCP tools
-3. Add more comprehensive testing
-4. Implement better credential management
+## SIGNAL Tasks
+1. Google Calendar and Auth Cred and Session Management 
