@@ -1,11 +1,14 @@
-*pycache*
-pycache*
-*pycache
+.gemini/
+gha-creds-*.json
 
-web_frontend
+__pycache__
+/__pycache__
+__pycache__/*
+*/__pycache__
+*/__pycache__/*
 
-.env
+.pytest_cache
 
 .venv
-
-secrets/
+/.venv
+.env

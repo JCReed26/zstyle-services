@@ -1,0 +1,45 @@
+# Core dependencies
+google-adk
+a2a
+agent-starter-pack
+ticktick-py
+pydantic
+fastapi
+fastapi-utilities
+mcp[cli]>=1.4.1
+
+# Telegram MCP dependencies
+mcp
+telethon>=1.39.0
+telegram
+python-json-logger>=3.3.0
+nest-asyncio>=1.6.0
+python-telegram-bot
+aiosqlite
+
+# Google APIs
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+
+# Database and async support
+sqlalchemy
+asyncpg
+psycopg2
+alembic
+
+# Authentication and security
+cryptography
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Utilities
+python-dotenv
+uvicorn
+requests
+aiofiles
+
+# Testing
+pytest
+pytest-asyncio
+httpx
