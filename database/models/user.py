@@ -1,10 +1,8 @@
-from sqlalchemy import Column, BigInteger, String, Text, DateTime
-from sqlalchemy.dialects.sqlite import BLOB
+from sqlalchemy import Column, BigInteger, String, DateTime
 from sqlalchemy.sql import func
 import uuid
-from database.sqlite_db import Base
+from database.supabase_db import Base
 
-# Helper for UUIDs in SQLite (stored as string)
 def generate_uuid():
     return str(uuid.uuid4())
 

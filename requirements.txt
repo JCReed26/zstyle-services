@@ -6,14 +6,13 @@ ticktick-py
 pydantic
 fastapi
 fastapi-utilities
-mcp[cli]>=1.4.1
 
-# Telegram MCP dependencies
+
 mcp
-telethon>=1.39.0
+telethon
 telegram
-python-json-logger>=3.3.0
-nest-asyncio>=1.6.0
+python-json-logger
+nest-asyncio
 python-telegram-bot
 aiosqlite
 
@@ -25,7 +24,7 @@ google-auth-oauthlib
 # Database and async support
 sqlalchemy
 asyncpg
-psycopg2
+psycopg2-binary
 alembic
 
 # Authentication and security
