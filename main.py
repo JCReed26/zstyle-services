@@ -107,6 +107,78 @@ app = get_fast_api_app(
 
 
 # =============================================================================
+# BRIDGE SETUP
+# =============================================================================
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from channels.router import MessageRouter
+from channels.base import NormalizedMessage, MessageType
+from agents.exec_func_coach.agent import root_agent
+
+# Initialize Bridge Components
+# We create a dedicated Runner for the bridge to handle external channel requests
+bridge_session_service = InMemorySessionService()
+bridge_runner = Runner(agent=root_agent, app_name="zstyle-bridge", session_service=bridge_session_service)
+message_router = MessageRouter(runner=bridge_runner, app_name="zstyle-bridge", session_service=bridge_session_service)
+
+class BridgeRequest(BaseModel):
+    """
+    JSON-safe representation of NormalizedMessage for API transport.
+    """
+    channel: str
+    user_id: str
+    channel_user_id: str
+    session_id: str
+    content_type: str
+    text: Optional[str] = None
+    attachments: List[str] = []  # Base64 strings
+    metadata: Dict[str, Any] = {}
+
+
+@app.post("/api/chat")
+async def chat_bridge(request: BridgeRequest):
+    """
+    Bridge endpoint for external channels (Telegram, etc.) to access the agent.
+    """
+    logger.info(f"Bridge received message from {request.channel} user {request.user_id}")
+    
+    try:
+        import base64
+        
+        # Decode attachments if present
+        decoded_attachments = []
+        if request.attachments:
+            for attach_str in request.attachments:
+                try:
+                    decoded_attachments.append(base64.b64decode(attach_str))
+                except Exception as e:
+                    logger.error(f"Failed to decode attachment: {e}")
+        
+        # Convert to NormalizedMessage
+        msg = NormalizedMessage(
+            channel=request.channel,
+            user_id=request.user_id,
+            channel_user_id=request.channel_user_id,
+            session_id=request.session_id,
+            content_type=MessageType(request.content_type),
+            text=request.text,
+            attachments=decoded_attachments,
+            metadata=request.metadata
+        )
+        
+        # Route to agent
+        response_text = await message_router.route(msg)
+        
+        return {"response": response_text}
+        
+    except Exception as e:
+        logger.error(f"Bridge error: {e}", exc_info=True)
+        return {"response": "I encountered an internal error. Please try again."}
+
+
+# =============================================================================
 # CUSTOM ENDPOINTS
 # =============================================================================
 

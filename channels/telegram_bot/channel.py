@@ -31,6 +31,7 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
+import httpx
 
 from telegram import Update
 from telegram.ext import (
@@ -515,12 +516,48 @@ async def main():
     )
     
     # For standalone mode, we need to connect to the ADK API
-    # This is a simplified echo handler for testing
-    async def echo_handler(message: NormalizedMessage) -> str:
-        return f"Echo: {message.text}"
+    # This is the HTTP Bridge Client implementation
+    async def http_bridge_handler(message: NormalizedMessage) -> str:
+        agent_url = os.getenv("AGENT_URL", "http://localhost:8000")
+        endpoint = f"{agent_url}/api/chat"
+        
+        import base64
+        
+        # Encode attachments to Base64 strings
+        encoded_attachments = []
+        if message.attachments:
+            for attach_bytes in message.attachments:
+                encoded_attachments.append(base64.b64encode(attach_bytes).decode('utf-8'))
+        
+        # Construct payload matching BridgeRequest in main.py
+        payload = {
+            "channel": message.channel,
+            "user_id": message.user_id,
+            "channel_user_id": message.channel_user_id,
+            "session_id": message.session_id,
+            "content_type": message.content_type.value,
+            "text": message.text,
+            "attachments": encoded_attachments,
+            "metadata": message.metadata
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                logger.info(f"Bridge sending to {endpoint} for user {message.user_id}")
+                response = await client.post(endpoint, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                return data.get("response", "No response content.")
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Agent API returned error {e.response.status_code}: {e.response.text}")
+            return f"I'm having trouble processing that (Error {e.response.status_code})."
+        except Exception as e:
+            logger.error(f"Bridge connection failed: {e}")
+            return "I'm currently disconnected from my brain. Please check if the App service is running."
     
     channel = TelegramChannel()
-    channel.set_message_handler(echo_handler)
+    channel.set_message_handler(http_bridge_handler)
     
     try:
         await channel.start()
