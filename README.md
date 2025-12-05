@@ -4,68 +4,52 @@ Executive Function Coach - AI-powered personal productivity assistant
 
 ## Architecture
 
-```
-┌─────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│   User      │    │   Telegram       │    │   AI Agent       │
-│             │◄──►│   (MCP)          │◄──►│                  │
-│   Telegram  │    │                  │    │  Exec Function   │
-│   Client    │    │  MCP Server      │    │  Coach          │
-└─────────────┘    └──────────────────┘    └──────────────────┘
-                                    │
-                                    │    ┌──────────────────┐
-                                    └───►│   Services       │
-                                         │                  │
-                                         │  - Auth          │
-                                         │  - Memory        │
-                                         │  - Artifacts     │
-                                         │  - Sessions      │
-                                         └──────────────────┘
-                                                         │
-                                                         │
-                                            ┌─────────────▼─────────────┐
-                                            │                           │
-                                            │        Database           │
-                                            │      (SQLite)             │
-                                            │                           │
-                                            └───────────────────────────┘
-```
+app - hosts ADK fast api app
+
+telegram_bot - hosts telegram bot with polling
 
 ## Components
 
 ### Agent
+
 - `/agents/exec_func_coach/` - Executive Function Coach agent
+- Acts as friend and guide to creating a life that moves the day to day forward
+- Helps create set and reach goals and Design systems to improve the experience of life
 - Uses Google ADK framework
-- Integrates with Google Calendar and Telegram via MCP
+- Integrates with Google Calendar, TickTick, and more for life management
 
 ### Services
-- `/services/auth/` - OAuth and credential management
-- `/services/memory/` - Long-term memory storage
+
+- `/services/memory/` - Long-term memory storage & RAG (No sessions just users and memory)
 - `/services/artifacts/` - File and document storage
-- `/services/session_service.py` - Session management
+- `/services/activity_log.py` - Session management
 
 ### MCP (Model Context Protocol)
-- `/services/telegram_mcp/` - Telegram integration via MCP
-- Provides messaging, chat, and notification capabilities
+
+- none implemented yet to come soon
+- idea 1: telegram mcp but for group chats with a2a agents working together
+- idea 2: twilio mcp server for agent to call users as reminder
 
 ## Setup
 
 1. Copy `.env.example` to `.env` and configure:
+
    ```bash
    cp .env.example .env
    ```
 
-2. Generate Telegram session string:
-   ```bash
-   python services/telegram_mcp/session_string_generator.py
-   ```
+2. Run with Docker:
 
-3. Run with Docker:
    ```bash
-   docker-compose up --build
+   bash ddup.sh
    ```
 
 ## Development
 
-- Main entry: `main.py`
-- Tests: `pytest` in `/tests/` directory
-- Database: SQLite (can be switched to other engines)
+- SQLite Database for initial development (move to supabase for prod)
+
+## Next Steps
+
+- Admin Dashboards For User Management and Viewing
+- Create Proper User Onboarding Process
+- Establish Memory, Credentials, and Infra CI/CD Prod vs Dev Bot
