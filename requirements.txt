@@ -1,0 +1,44 @@
+# Core dependencies
+google-adk
+a2a
+agent-starter-pack
+ticktick-py
+pydantic
+fastapi
+fastapi-utilities
+
+
+mcp
+telethon
+telegram
+python-json-logger
+nest-asyncio
+python-telegram-bot
+aiosqlite
+
+# Google APIs
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+
+# Database and async support
+sqlalchemy
+asyncpg
+psycopg2-binary
+alembic
+
+# Authentication and security
+cryptography
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Utilities
+python-dotenv
+uvicorn
+requests
+aiofiles
+
+# Testing
+pytest
+pytest-asyncio
+httpx

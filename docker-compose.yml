@@ -1,0 +1,85 @@
+# =============================================================================
+# ZStyle Services - Docker Compose Configuration
+# =============================================================================
+#
+# SERVICES:
+#   app          - Main FastAPI + ADK service (port 8000)
+#   telegram-bot - Telegram channel (connects to app)
+#
+# USAGE:
+#   Development:  docker-compose up --build
+#   Production:   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+#   Reset DB:     docker-compose run --rm app python reset_db.py
+#
+# VOLUMES:
+#   - ./zstyle.db is mounted for persistent SQLite storage
+#   - ./client_secret.json for Google OAuth (if using calendar)
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Main Application (FastAPI + ADK)
+  # ---------------------------------------------------------------------------
+  app:
+    build: .
+    container_name: zstyle_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+    volumes:
+      # Persistent database
+      - ./zstyle.db:/app/zstyle.db
+      # Google OAuth credentials (optional)
+      - ./client_secret.json:/app/client_secret.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Telegram Bot Channel
+  # ---------------------------------------------------------------------------
+  telegram-bot:
+    build: .
+    container_name: zstyle_telegram_bot
+    restart: unless-stopped
+    command: python -m channels.telegram_bot
+    env_file:
+      - .env
+    environment:
+      # Point to the app service for API calls
+      - AGENT_URL=http://app:8000
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      # Share database for user lookups
+      - ./zstyle.db:/app/zstyle.db
+
+# =============================================================================
+# NOTES:
+# =============================================================================
+#
+# Adding a new channel:
+#   1. Create the channel in channels/your_channel/
+#   2. Add a new service here similar to telegram-bot
+#   3. Set AGENT_URL=http://app:8000
+#
+# Environment Variables (.env):
+#   GOOGLE_API_KEY=your-gemini-api-key
+#   TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+#   DATABASE_URL=postgresql://... (optional, for production)
+#
+# For production, consider:
+#   - Using a separate PostgreSQL container
+#   - Adding nginx for SSL termination
+#   - Using Docker secrets for sensitive data
+#
+# =============================================================================

@@ -1,3 +1,0 @@
-TODO: Integrate Supabase into backend and run apis through here to supabase not locally 
-
-https://neon.com/

@@ -1,9 +1,0 @@
-fastapi
-uvicorn
-pymongo
-python-dotenv
-passlib[bcrypt]
-pydantic[email]
-gunicorn
-websockets
-google-cloud-logging
