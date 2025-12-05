@@ -35,6 +35,7 @@ ADDING A NEW TOOL:
 IMPORTANT: Always handle errors gracefully and return status dictionaries.
 """
 import datetime
+import asyncio
 from typing import Dict, Any, List, Optional
 import uuid
 from google.oauth2.credentials import Credentials
@@ -207,13 +208,16 @@ async def get_user_calendar_events(
         time_min = f"{start_date}T00:00:00Z"
         time_max = f"{end_date}T23:59:59Z"
         
-        events_result = service.events().list(
+        # Create the request object but don't execute it yet
+        request = service.events().list(
             calendarId='primary', 
             timeMin=time_min,
             timeMax=time_max,
             singleEvents=True,
             orderBy='startTime'
-        ).execute()
+        )
+        # Run the blocking .execute() in a separate thread
+        events_result = await asyncio.to_thread(request.execute)
         
         events = events_result.get('items', [])
         formatted_events = []
@@ -270,7 +274,8 @@ async def add_calendar_event(
             },
         }
 
-        event = service.events().insert(calendarId='primary', body=event).execute()
+        request = service.events().insert(calendarId='primary', body=event)
+        event = await asyncio.to_thread(request.execute)
         return {"status": "success", "event_id": event.get('id'), "link": event.get('htmlLink')}
 
     except ValueError as e:
@@ -294,7 +299,8 @@ async def delete_calendar_event(
     """
     try:
         service = await _get_calendar_service(tool_context)
-        service.events().delete(calendarId='primary', eventId=event_id).execute()
+        request = service.events().delete(calendarId='primary', eventId=event_id)
+        await asyncio.to_thread(request.execute)
         return {"status": "success", "message": "Event deleted successfully."}
     except ValueError as e:
         return {"status": "auth_required", "message": str(e)}
@@ -338,7 +344,7 @@ async def create_reminder(
 # TASK TOOLS (Placeholders)
 # =============================================================================
 
-async def get_task_list(tool_context: ToolContext, list_name: str = "default") -> Dict[str, Any]:
+async def get_task_list(list_name: str = "default", tool_context: ToolContext = None) -> Dict[str, Any]:
     """
     Get tasks from the task management system.
     
@@ -349,9 +355,9 @@ async def get_task_list(tool_context: ToolContext, list_name: str = "default") -
 
 async def add_task(
     title: str, 
-    tool_context: ToolContext, 
     description: str = "", 
-    due_date: str = None
+    due_date: str = None,
+    tool_context: ToolContext = None
 ) -> Dict[str, Any]:
     """
     Add a task to the task management system.
