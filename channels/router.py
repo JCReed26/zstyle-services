@@ -202,12 +202,24 @@ class MessageRouter:
         if message.content_type == MessageType.IMAGE and message.attachments:
             # Add image as inline data (if supported by model)
             for attachment in message.attachments:
+                # Use metadata mime_type if available, else default to jpeg
+                mime_type = message.metadata.get("mime_type", "image/jpeg")
                 parts.append(types.Part(inline_data=types.Blob(
-                    mime_type="image/jpeg",  # TODO: detect actual type
+                    mime_type=mime_type,
+                    data=attachment
+                )))
+
+        elif message.content_type == MessageType.VOICE and message.attachments:
+            # Add audio as inline data
+            for attachment in message.attachments:
+                # Use metadata mime_type if available, else default to ogg (Telegram default)
+                mime_type = message.metadata.get("mime_type", "audio/ogg")
+                parts.append(types.Part(inline_data=types.Blob(
+                    mime_type=mime_type,
                     data=attachment
                 )))
         
-        # TODO: Handle audio, files, etc.
+        # TODO: Handle files
         
         return types.Content(role="user", parts=parts)
     

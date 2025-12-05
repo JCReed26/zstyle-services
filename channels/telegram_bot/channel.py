@@ -177,6 +177,9 @@ class TelegramChannel(ConversationalChannel):
             MessageHandler(filters.PHOTO, self._handle_photo)
         )
         self.application.add_handler(
+            MessageHandler(filters.VIDEO, self._handle_video)
+        )
+        self.application.add_handler(
             MessageHandler(filters.VOICE | filters.AUDIO, self._handle_voice)
         )
         self.application.add_handler(
@@ -374,12 +377,52 @@ class TelegramChannel(ConversationalChannel):
             await self.send_response(user_id, response, str(chat_id))
         else:
             await update.message.reply_text("I received your image but I'm not fully connected yet.")
+
+    async def _handle_video(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Handle incoming video messages.
+        """
+        telegram_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        user_id = await self._get_or_create_user(telegram_id)
+        conv_ctx = await self.get_or_create_context(user_id)
+        
+        # We don't download the video yet to save bandwidth since we're just rejecting it
+        # But we still track the interaction
+        
+        caption = update.effective_message.caption or ""
+        
+        # Create a placeholder message for history
+        # We use content_type TEXT for now since we aren't processing the video content
+        message = NormalizedMessage(
+            channel="telegram",
+            user_id=user_id,
+            channel_user_id=str(chat_id),
+            session_id=conv_ctx.session_id,
+            content_type=MessageType.TEXT, 
+            text=f"[User sent a video] {caption}",
+            attachments=[],
+            raw_event=update,
+            metadata={"file_id": update.effective_message.video.file_id}
+        )
+        
+        conv_ctx.add_message(message)
+        
+        # Add explicit logging to debug
+        logger.info(f"Sending video apology to chat_id: {chat_id}")
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="I received your video message. Video analysis is coming soon! For now, please type your message."
+            )
+        except Exception as e:
+            logger.error(f"Failed to send video apology: {e}")
+
     
     async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Handle incoming voice/audio messages.
-        
-        TODO: Add transcription support
         """
         telegram_id = update.effective_user.id
         chat_id = update.effective_chat.id
@@ -390,25 +433,42 @@ class TelegramChannel(ConversationalChannel):
         file = await context.bot.get_file(voice.file_id)
         audio_bytes = await file.download_as_bytearray()
         
+        # Determine mime type
+        mime_type = voice.mime_type if hasattr(voice, 'mime_type') and voice.mime_type else "audio/ogg"
+        
         message = NormalizedMessage(
             channel="telegram",
             user_id=user_id,
             channel_user_id=str(chat_id),
             session_id=conv_ctx.session_id,
             content_type=MessageType.VOICE,
-            text=None,  # TODO: transcription
+            text=None,
             attachments=[bytes(audio_bytes)],
             raw_event=update,
-            metadata={"file_id": voice.file_id, "duration": voice.duration}
+            metadata={
+                "file_id": voice.file_id, 
+                "duration": voice.duration,
+                "mime_type": mime_type
+            }
         )
         
         conv_ctx.add_message(message)
         
-        # For now, inform user we don't support voice yet
-        await update.message.reply_text(
-            "I received your voice message. Voice transcription coming soon! "
-            "For now, please type your message."
-        )
+        # Show typing indicator
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        
+        if self._message_handler:
+            response = await self._message_handler(message)
+            await self.send_response(
+                user_id=user_id, 
+                response=response, 
+                channel_user_id=str(chat_id),
+                metadata={"reply_to_message_id": update.effective_message.message_id}
+            )
+        else:
+            await update.message.reply_text(
+                "I received your voice message but I'm not fully connected yet."
+            )
     
     async def _handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
