@@ -42,6 +42,43 @@ from .tools import (
     get_task_list,
     add_task
 )
+from google.adk.tools import ToolContext
+from typing import Dict, Any
+import datetime
+
+# =============================================================================
+# DATE TOOLS
+# =============================================================================
+
+async def get_todays_date(tool_context: ToolContext) -> Dict[str, Any]:
+    """
+    Get the current date.
+    """
+    return {"status": "success", "date": datetime.datetime.now().strftime("%Y-%m-%d")}
+
+async def get_day_of_week(tool_context: ToolContext) -> Dict[str, Any]:
+    """
+    Get the current day of the week.
+    """
+    return {"status": "success", "day_of_week": datetime.datetime.now().strftime("%A")}
+
+async def get_month(tool_context: ToolContext) -> Dict[str, Any]:
+    """
+    Get the current month.
+    """
+    return {"status": "success", "month": datetime.datetime.now().strftime("%B")}
+
+async def get_year(tool_context: ToolContext) -> Dict[str, Any]:
+    """
+    Get the current year.
+    """
+    return {"status": "success", "year": datetime.datetime.now().strftime("%Y")}
+
+async def get_time(tool_context: ToolContext) -> Dict[str, Any]:
+    """
+    Get the current time.
+    """
+    return {"status": "success", "time": datetime.datetime.now().strftime("%H:%M:%S")}
 
 # Define the executive function coach agent with tools
 root_agent = Agent(
@@ -105,6 +142,12 @@ When modifying the calendar (adding/removing), always confirm details first.
         # Task tools
         get_task_list,
         add_task,
+        # Date tools
+        get_todays_date,
+        get_day_of_week,
+        get_month,
+        get_year,
+        get_time,
     ],
     # Sub-agents can be added here as the system grows
     # sub_agents=[planning_agent, habit_agent]

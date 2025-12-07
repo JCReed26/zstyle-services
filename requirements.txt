@@ -37,6 +37,7 @@ python-dotenv
 uvicorn
 requests
 aiofiles
+watchdog
 
 # Testing
 pytest
