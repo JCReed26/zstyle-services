@@ -22,17 +22,27 @@ load_dotenv()
 # DATABASE CONFIGURATION
 # =============================================================================
 
-# === PRODUCTION: Uncomment for Supabase/PostgreSQL ===
-# DATABASE_URL = os.getenv("DATABASE_URL")
-# if not DATABASE_URL:
-#     raise ValueError("DATABASE_URL environment variable is required for production")
-# # Fix for SQLAlchemy Async: 'postgresql://' -> 'postgresql+asyncpg://'
-# if DATABASE_URL.startswith("postgresql://"):
-#     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+# === DATABASE URL CONFIGURATION ===
+# Prefer SQLite unless USE_POSTGRES=true. This avoids accidental remote DB attempts
+# when DATABASE_URL is present in .env but Postgres is not reachable.
+DATABASE_URL = os.getenv("DATABASE_URL")
+USE_POSTGRES = os.getenv("USE_POSTGRES", "").lower() in ("1", "true", "yes")
 
-# === DEVELOPMENT: SQLite (default) ===
-# Simple file-based database, easy to reset during development
-DATABASE_URL = "sqlite+aiosqlite:///zstyle.db"
+if USE_POSTGRES:
+    if not DATABASE_URL:
+        raise ValueError("USE_POSTGRES is true but DATABASE_URL is not set")
+    # Fix for SQLAlchemy Async: 'postgresql://' -> 'postgresql+asyncpg://'
+    if DATABASE_URL.startswith("postgresql://"):
+        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    # Development: SQLite (default)
+    # Use absolute path to match Docker mount point (/app/zstyle.db).
+    # Override with SQLITE_DB_PATH if needed.
+    sqlite_path = os.getenv("SQLITE_DB_PATH", "/app/zstyle.db")
+    if os.path.isabs(sqlite_path):
+        DATABASE_URL = f"sqlite+aiosqlite:///{sqlite_path}"
+    else:
+        DATABASE_URL = f"sqlite+aiosqlite:///{os.path.abspath(sqlite_path)}"
 
 # =============================================================================
 # ENGINE & SESSION SETUP
