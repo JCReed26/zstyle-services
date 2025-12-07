@@ -59,6 +59,7 @@ class UserContext:
     Contains all standardized slots plus relevant flexible memories.
     """
     user_id: str
+    timezone: Optional[str] = None
     current_goal: Optional[Dict[str, Any]] = None
     goal_progress: Optional[Dict[str, Any]] = None
     preferences: Optional[Dict[str, Any]] = None
@@ -73,6 +74,8 @@ class UserContext:
         """
         parts = []
         
+        if self.timezone:
+            parts.append(f"Timezone: {self.timezone}")
         if self.current_goal:
             parts.append(f"Current Goal: {self.current_goal}")
         if self.goal_progress:
@@ -336,6 +339,7 @@ class ZStyleMemoryService:
         context = UserContext(user_id=user_id)
         
         # Load standardized slots
+        context.timezone = await self.get_memory_slot(user_id, MemorySlot.TIMEZONE)
         context.current_goal = await self.get_memory_slot(user_id, MemorySlot.CURRENT_GOAL)
         context.goal_progress = await self.get_memory_slot(user_id, MemorySlot.GOAL_PROGRESS)
         context.preferences = await self.get_memory_slot(user_id, MemorySlot.USER_PREFERENCES)

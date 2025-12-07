@@ -181,6 +181,39 @@ async def get_user_preferences(tool_context: ToolContext) -> Dict[str, Any]:
         "preferences": {"timezone": "UTC", "temp_unit": "C"}  # Defaults
     }
 
+async def get_user_context(
+    tool_context: ToolContext,
+    include_flexible: bool = False,
+    flexible_tags: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Retrieve the aggregated user context for the current user.
+
+    Args:
+        tool_context: ToolContext injected by ADK (with user_id in state)
+        include_flexible: Whether to include flexible (tagged) memories
+        flexible_tags: Filter flexible memories by these tags
+        
+    Returns:
+        Dictionary containing user context or error.
+    """
+    user_id = tool_context.state.get('user_id')
+    if not user_id:
+        return {"status": "error", "message": "User not identified"}
+
+    try:
+        context = await memory_service.get_user_context(
+            user_id=user_id,
+            include_flexible=include_flexible,
+            flexible_tags=flexible_tags
+        )
+        return {"status": "success", "context": context}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+
+
 
 # =============================================================================
 # CALENDAR TOOLS
@@ -365,3 +398,4 @@ async def add_task(
     Note: This is a placeholder. TickTick/Task integration not yet implemented.
     """
     return {"status": "info", "message": "Task integration not yet set up. Use calendar events or set goals instead."}
+
