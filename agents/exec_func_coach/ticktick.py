@@ -3,17 +3,56 @@ TickTick Agent Implementation using Google ADK OpenAPIToolset.
 
 This module defines a specialized agent for TickTick integration.
 It uses a partial OpenAPI specification to generate tools dynamically.
+It employs a ContextVar-based header injection to support multi-user authentication
+with a single global agent instance.
 """
 import os
 import json
-from typing import Dict, Any, List, Optional
+import contextvars
+from typing import Dict, Any, List, Optional, MutableMapping, Iterator
 from google.adk.agents import Agent
 from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import OpenAPIToolset
+from google.adk.tools.agent_tool import AgentTool
+from google.adk.tools import ToolContext
+
 from .helpers import _get_credential
 from database.models import CredentialType
 
+# ContextVar to hold the current user's access token during execution
+_current_ticktick_token: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("ticktick_token", default=None)
+
+class DynamicAuthHeaders(MutableMapping):
+    """
+    A dictionary-like object that injects the Authorization header
+    dynamically from a ContextVar.
+    """
+    def __init__(self):
+        self._store = {}
+
+    def __getitem__(self, key):
+        if key == "Authorization":
+            token = _current_ticktick_token.get()
+            if token:
+                return f"Bearer {token}"
+            return "" # Or raise error?
+        return self._store[key]
+
+    def __setitem__(self, key, value):
+        self._store[key] = value
+
+    def __delitem__(self, key):
+        del self._store[key]
+
+    def __iter__(self) -> Iterator:
+        keys = list(self._store.keys())
+        if "Authorization" not in keys:
+            keys.append("Authorization")
+        return iter(keys)
+
+    def __len__(self):
+        return len(self._store) + 1
+
 # Partial OpenAPI Specification for TickTick
-# Based on common endpoints needed for task management
 TICKTICK_OPENAPI_SPEC = """
 {
   "openapi": "3.0.0",
@@ -43,8 +82,8 @@ TICKTICK_OPENAPI_SPEC = """
                   "items": {
                     "type": "object",
                     "properties": {
-                      "id": { "type": "string", "description": "The project ID" },
-                      "name": { "type": "string", "description": "The name of the project" },
+                      "id": { "type": "string" },
+                      "name": { "type": "string" },
                       "color": { "type": "string" },
                       "sortOrder": { "type": "integer" }
                     }
@@ -80,17 +119,14 @@ TICKTICK_OPENAPI_SPEC = """
                   "items": {
                     "type": "object",
                     "properties": {
-                      "id": { "type": "string", "description": "Task ID" },
-                      "projectId": { "type": "string", "description": "Project ID" },
-                      "title": { "type": "string", "description": "Task title" },
-                      "content": { "type": "string", "description": "Task description/content" },
-                      "startDate": { "type": "string", "format": "date-time" },
-                      "dueDate": { "type": "string", "format": "date-time" },
-                      "timeZone": { "type": "string" },
-                      "isAllDay": { "type": "boolean" },
-                      "priority": { "type": "integer", "description": "0: None, 1: Low, 3: Medium, 5: High" },
-                      "status": { "type": "integer", "description": "0: Normal, 2: Completed" },
-                      "completedTime": { "type": "string", "format": "date-time" }
+                      "id": { "type": "string" },
+                      "projectId": { "type": "string" },
+                      "title": { "type": "string" },
+                      "content": { "type": "string" },
+                      "startDate": { "type": "string" },
+                      "dueDate": { "type": "string" },
+                      "priority": { "type": "integer" },
+                      "status": { "type": "integer" }
                     }
                   }
                 }
@@ -113,11 +149,11 @@ TICKTICK_OPENAPI_SPEC = """
                 "type": "object",
                 "required": ["title"],
                 "properties": {
-                  "title": { "type": "string", "description": "Task title" },
-                  "content": { "type": "string", "description": "Task content/description" },
-                  "projectId": { "type": "string", "description": "Project ID (optional)" },
-                  "dueDate": { "type": "string", "format": "date-time", "description": "Due date in ISO 8601 format (e.g. 2023-10-01T12:00:00+0000)" },
-                  "priority": { "type": "integer", "description": "0: None, 1: Low, 3: Medium, 5: High" }
+                  "title": { "type": "string" },
+                  "content": { "type": "string" },
+                  "projectId": { "type": "string" },
+                  "dueDate": { "type": "string" },
+                  "priority": { "type": "integer" }
                 }
               }
             }
@@ -185,115 +221,55 @@ BEST PRACTICES:
 1. When asking to create a task, check if the user specified a project. If not, you can create it in the default list (by omitting projectId) or ask for clarification if context suggests a specific list.
 2. To complete a task, you often need to find it first. If you don't have the taskId, try listing tasks in the relevant project first to find the ID.
 3. When listing tasks, summarize them clearly for the user (e.g., "Here are your tasks in 'Work':...").
-4. Priority levels are: 0 (None), 1 (Low), 3 (Medium), 5 (High). Map user terms like "urgent" to High (5) and "important" to Medium (3) or High depending on context.
-5. Dates should be formatted as ISO 8601 strings if possible, or clear text that the API understands if supported. For this API, use ISO 8601 (e.g., "2023-12-31T23:59:59+0000").
-
-If you encounter a 401/403 error, it means authentication failed or is missing.
+4. Priority levels are: 0 (None), 1 (Low), 3 (Medium), 5 (High).
+5. Dates should be formatted as ISO 8601 strings (e.g., "2023-12-31T23:59:59+0000").
 """
 
-def get_ticktick_tools(access_token: str) -> List[Any]:
-    """
-    Generate TickTick tools using OpenAPIToolset.
-    """
-    toolset = OpenAPIToolset(
-        spec_str=TICKTICK_OPENAPI_SPEC,
-        spec_str_type='json',
-        # Inject the Authorization header for all requests
-        headers={"Authorization": f"Bearer {access_token}"}
-    )
-    return [toolset]
+# Initialize Toolset with Dynamic Headers
+# The OpenAPIToolset will refer to this mapping for every request.
+_dynamic_headers = DynamicAuthHeaders()
+ticktick_toolset = OpenAPIToolset(
+    spec_str=TICKTICK_OPENAPI_SPEC,
+    spec_str_type='json',
+    headers=_dynamic_headers
+)
 
-async def create_ticktick_agent(user_id: str) -> Optional[Agent]:
+# Global TickTick Agent
+ticktick_agent = Agent(
+    model='gemini-2.0-flash-exp',
+    name='ticktick_manager',
+    description='Specialized agent for managing TickTick tasks and projects.',
+    instruction=TICKTICK_AGENT_INSTRUCTION,
+    tools=[ticktick_toolset]
+)
+
+class TickTickAgentTool(AgentTool):
     """
-    Create a configured TickTick Agent for the specific user.
-    Retrieves the user's TickTick token from the database.
+    A wrapper around the TickTick Agent that sets the user's authentication
+    context before execution.
     """
-    # 1. Get the credential
-    cred = await _get_credential(user_id, CredentialType.TICKTICK_TOKEN)
+    def __init__(self, agent: Agent):
+        super().__init__(agent=agent)
     
-    if not cred or not cred.get('token'):
-        # If no token, we can't create a functional agent with these tools
-        # The calling system should handle this (e.g., prompt for auth)
-        return None
+    async def execute(self, tool_context: ToolContext, **kwargs) -> Dict[str, Any]:
+        user_id = tool_context.state.get('user_id')
+        if not user_id:
+             return {"status": "error", "message": "User not identified for TickTick access."}
 
-    access_token = cred['token']
-
-    # 2. Generate tools
-    tools = get_ticktick_tools(access_token)
-
-    # 3. Create Agent
-    agent = Agent(
-        model='gemini-2.0-flash-exp',  # Or configured model
-        name='ticktick_manager',
-        description='Specialized agent for managing TickTick tasks and projects.',
-        instruction=TICKTICK_AGENT_INSTRUCTION,
-        tools=tools
-    )
-    
-    return agent
-
-import uuid
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from google.genai import types
-from google.adk.tools import ToolContext
-
-async def ticktick_tool_wrapper(
-    instruction: str,
-    tool_context: ToolContext
-) -> Dict[str, Any]:
-    """
-    Manage TickTick tasks and projects via a specialized AI agent.
-    
-    Args:
-        instruction: Natural language instruction for the agent (e.g., "List my tasks", "Add a task to buy milk").
+        # 1. Retrieve Credential
+        cred = await _get_credential(user_id, CredentialType.TICKTICK_TOKEN)
+        if not cred or not cred.get('token'):
+             return {
+                 "status": "error", 
+                 "message": "TickTick authentication missing. Please use the auth tool to login."
+             }
         
-    Returns:
-        The agent's response/result.
-    """
-    user_id = tool_context.state.get('user_id')
-    if not user_id:
-        return {"status": "error", "message": "User not identified"}
+        # 2. Set ContextVar for the duration of this call
+        token = _current_ticktick_token.set(cred['token'])
+        try:
+            # 3. Delegate to standard AgentTool execution
+            return await super().execute(tool_context, **kwargs)
+        finally:
+            # 4. Clean up
+            _current_ticktick_token.reset(token)
 
-    agent = await create_ticktick_agent(user_id)
-    if not agent:
-        return {
-            "status": "error", 
-            "message": "TickTick authentication not found. Please authenticate first using the auth link."
-        }
-
-    # Create a temporary session for this interaction
-    # In a real app, you might want to persist sub-agent sessions
-    session_id = f"ticktick_session_{user_id}_{uuid.uuid4()}"
-    session_service = InMemorySessionService()
-    
-    runner = Runner(
-        agent=agent,
-        app_name="ticktick_sub_agent",
-        session_service=session_service
-    )
-    
-    await session_service.create_session(
-        app_name="ticktick_sub_agent",
-        user_id=user_id,
-        session_id=session_id
-    )
-
-    response_text = ""
-    try:
-        content = types.Content(role='user', parts=[types.Part(text=instruction)])
-        
-        async for event in runner.run_async(
-            user_id=user_id, 
-            session_id=session_id, 
-            new_message=content
-        ):
-            if event.is_final_response() and event.content and event.content.parts:
-                response_text = event.content.parts[0].text
-                
-        return {
-            "status": "success",
-            "agent_response": response_text
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Agent execution failed: {str(e)}"}
