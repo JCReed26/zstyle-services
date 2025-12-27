@@ -48,7 +48,7 @@ from channels.base import (
     NormalizedMessage,
     MessageType,
 )
-from database.engine import AsyncSessionLocal
+from database.core import AsyncSessionLocal
 from database.models import User
 from sqlalchemy import select
 

@@ -1,7 +1,7 @@
 """
 ZStyle Database Package
 
-Provides database engine, session management, and models.
+Provides database.core, session management, and models.
 
 Quick Start:
     from database import engine, AsyncSessionLocal, Base, get_db_session
@@ -10,7 +10,7 @@ Quick Start:
 To reset the database (drops all tables and recreates):
     python reset_db.py
 """
-from .engine import engine, AsyncSessionLocal, Base, get_db_session
+from .core import engine, AsyncSessionLocal, Base, get_db_session
 from . import models
 
 __all__ = [

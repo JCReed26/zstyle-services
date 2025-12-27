@@ -2,10 +2,10 @@
 google-adk
 a2a
 agent-starter-pack
-ticktick-py
 pydantic
 fastapi
 fastapi-utilities
+openmemory
 
 
 mcp

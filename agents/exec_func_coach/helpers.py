@@ -47,7 +47,8 @@ from google.adk.tools import ToolContext
 from google.adk.auth.credential_manager import CredentialManager
 import urllib.parse
 
-from database.engine import AsyncSessionLocal
+
+from database.core import AsyncSessionLocal
 from database.models import Credential, MemorySlot, CredentialType
 from services.memory import memory_service
 
@@ -80,32 +81,6 @@ async def _get_credential(user_id: str, credential_type: str) -> Optional[Dict[s
                 "extra_data": cred.extra_data
             }
     return None
-
-
-# Helper to get authenticated client
-async def _get_ticktick_client(user_id: str) -> Optional[TickTickClient]:
-    cred = await _get_credential(user_id, CredentialType.TICKTICK_TOKEN)
-    if not cred:
-        return None
-        
-    auth_client = OAuth2(
-        client_id=os.getenv("TICKTICK_CLIENT_ID"),
-        client_secret=os.getenv("TICKTICK_CLIENT_SECRET"),
-        redirect_uri=os.getenv("TICKTICK_REDIRECT_URI", "http://localhost:8000/callback")
-    )
-    
-    # ticktick-py expects access_token in the state if restoring
-    # We might need to manually set it or re-auth if the library design is strict.
-    # The library typically wants you to pass the token object.
-    
-    # Reconstructing the client state:
-    client = TickTickClient(
-        username=None, 
-        password=None, 
-        oauth=auth_client,
-        access_token=cred['token']
-    )
-    return client
 
 
 # =============================================================================

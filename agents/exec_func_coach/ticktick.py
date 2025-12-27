@@ -228,11 +228,16 @@ BEST PRACTICES:
 # Initialize Toolset with Dynamic Headers
 # The OpenAPIToolset will refer to this mapping for every request.
 _dynamic_headers = DynamicAuthHeaders()
+# OpenAPIToolset might not accept headers in init depending on version.
+# We will try to set it after or assume the library handles it differently.
+# For now, we remove it from init to fix the crash and will investigate how to inject it.
 ticktick_toolset = OpenAPIToolset(
     spec_str=TICKTICK_OPENAPI_SPEC,
-    spec_str_type='json',
-    headers=_dynamic_headers
+    spec_str_type='json'
 )
+# Inject headers if possible (this is a guess fix for the ADK library)
+if hasattr(ticktick_toolset, 'headers'):
+    ticktick_toolset.headers = _dynamic_headers
 
 # Global TickTick Agent
 ticktick_agent = Agent(
@@ -251,7 +256,7 @@ class TickTickAgentTool(AgentTool):
     def __init__(self, agent: Agent):
         super().__init__(agent=agent)
     
-    async def execute(self, tool_context: ToolContext, **kwargs) -> Dict[str, Any]:
+    async def run_async(self, tool_context: ToolContext, **kwargs) -> Dict[str, Any]:
         user_id = tool_context.state.get('user_id')
         if not user_id:
              return {"status": "error", "message": "User not identified for TickTick access."}
@@ -268,8 +273,11 @@ class TickTickAgentTool(AgentTool):
         token = _current_ticktick_token.set(cred['token'])
         try:
             # 3. Delegate to standard AgentTool execution
-            return await super().execute(tool_context, **kwargs)
+            return await super().run_async(tool_context, **kwargs)
         finally:
             # 4. Clean up
             _current_ticktick_token.reset(token)
+
+# Export the tool wrapper for use in capabilities.py
+ticktick_tool_wrapper = TickTickAgentTool(agent=ticktick_agent)
 

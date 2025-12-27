@@ -23,7 +23,7 @@ from sqlalchemy import Column, String, DateTime, JSON, ForeignKey, Integer, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from database.engine import Base
+from database.core import Base
 
 
 class ActivityLogSource(str, Enum):

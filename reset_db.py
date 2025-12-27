@@ -13,7 +13,7 @@ WARNING: This will DELETE all data in the database!
 import asyncio
 import sys
 
-from database.engine import engine, Base
+from database.core import engine, Base
 
 # Import all models to ensure they're registered with Base.metadata
 # This is required for create_all() to know about all tables

@@ -39,7 +39,7 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 
 from google.adk.cli.fast_api import get_fast_api_app
-from database.engine import engine, Base
+from database.core import engine, Base
 
 # Import all models to ensure they're registered with Base.metadata
 from database.models import User, UserMemory, ActivityLog, Credential

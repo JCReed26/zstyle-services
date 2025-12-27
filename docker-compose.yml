@@ -5,6 +5,7 @@
 # SERVICES:
 #   app          - Main FastAPI + ADK service (port 8000)
 #   telegram-bot - Telegram channel (connects to app)
+#   openmemory   - Long-term memory service
 #
 # USAGE:
 #   Development:  docker-compose up --build
@@ -32,10 +33,12 @@ services:
       - .env
     environment:
       - PORT=8000
+      - OPENMEMORY_URL=http://openmemory:3000
     volumes:
       # Live-reload agent/channel code
       - ./agents:/app/agents
       - ./channels:/app/channels
+      - ./services:/app/services
       # Persistent database
       - ./zstyle.db:/app/zstyle.db
       # Google OAuth credentials (optional)
@@ -46,6 +49,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      - openmemory
 
   # ---------------------------------------------------------------------------
   # Telegram Bot Channel
@@ -69,6 +74,26 @@ services:
       - ./channels:/app/channels
       # Share database for user lookups
       - ./zstyle.db:/app/zstyle.db
+
+  # ---------------------------------------------------------------------------
+  # OpenMemory Service
+  # ---------------------------------------------------------------------------
+  openmemory:
+    image: mem0ai/mem0:latest
+    container_name: zstyle_openmemory
+    restart: unless-stopped
+    ports:
+      - "3000:8000" # Mem0 usually listens on 8000, mapping to 3000 to avoid conflict with app
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY} # If using OpenAI
+    volumes:
+      - openmemory_data:/app/data
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  openmemory_data:
 
 # =============================================================================
 # NOTES:

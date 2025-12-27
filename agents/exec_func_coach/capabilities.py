@@ -4,7 +4,7 @@ from google.adk.tools.google_search_agent_tool import GoogleSearchAgentTool, cre
 from google.adk.tools.google_api_tool.google_api_toolsets import CalendarToolset, GmailToolset
 
 from services.memory import memory_service
-from database.engine import AsyncSessionLocal
+from database.core import AsyncSessionLocal
 from database.models import Credential, CredentialType
 from sqlalchemy import select
 import asyncio
@@ -22,39 +22,81 @@ from .ticktick import ticktick_tool_wrapper
 # =============================================================================
 # GOOGLE CALENDAR TOOL
 # =============================================================================
-google_calendar_toolset = CalendarToolset(
-    client_id=os.getenv('GOOGLE_CLIENT_ID'),
-    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
-    tool_filter=None,
-    service_account=None,
-    tool_name_prefix='google_calendar_tools'
-)
-google_calendar_agent = Agent(
-    name='google_calendar_agent',
-    description='An agent that can manage a users google calendar',
-    instruction='You are a google calendar agent that can manage a users google calendar',
-    tools=[google_calendar_toolset]
-)
-google_calendar_tool = AgentTool(google_calendar_agent)
+try:
+    google_calendar_toolset = CalendarToolset(
+        client_id=os.getenv('GOOGLE_CLIENT_ID'),
+        client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+        tool_filter=None,
+        service_account=None,
+        tool_name_prefix='google_calendar_tools'
+    )
+    google_calendar_agent = Agent(
+        name='google_calendar_agent',
+        description='An agent that can manage a users google calendar',
+        instruction='You are a google calendar agent that can manage a users google calendar',
+        tools=[google_calendar_toolset]
+    )
+    google_calendar_tool = AgentTool(google_calendar_agent)
+except Exception as e:
+    import json
+    import time
+    # #region agent log
+    try:
+        with open('/Users/jcreed/Documents/GitHub/zstyle-services/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H2",
+                "location": "agents/exec_func_coach/capabilities.py:google_calendar_tool",
+                "message": f"Failed to initialize Google Calendar tool: {str(e)}",
+                "data": {},
+                "timestamp": int(time.time() * 1000)
+            }) + "\n")
+    except:
+        pass
+    # #endregion
+    print(f"WARNING: Google Calendar tool failed to initialize: {e}")
+    google_calendar_tool = None
 
 # =============================================================================
 # GOOGLE GMAIL TOOL
 # =============================================================================
 
-google_gmail_toolset = GmailToolset(
-    client_id=os.getenv('GOOGLE_CLIENT_ID'),
-    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
-    tool_filter=None,
-    service_account=None,
-    tool_name_prefix='google_gmail_tools'
-)
-google_gmail_agent = Agent(
-    name='google_gmail_agent',
-    description='An agent that can manage a users google gmail',
-    instruction='You are a google gmail agent that can manage a users google gmail',
-    tools=[google_gmail_toolset]
-)
-google_gmail_tool = AgentTool(google_gmail_agent)
+try:
+    google_gmail_toolset = GmailToolset(
+        client_id=os.getenv('GOOGLE_CLIENT_ID'),
+        client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+        tool_filter=None,
+        service_account=None,
+        tool_name_prefix='google_gmail_tools'
+    )
+    google_gmail_agent = Agent(
+        name='google_gmail_agent',
+        description='An agent that can manage a users google gmail',
+        instruction='You are a google gmail agent that can manage a users google gmail',
+        tools=[google_gmail_toolset]
+    )
+    google_gmail_tool = AgentTool(google_gmail_agent)
+except Exception as e:
+    import json
+    import time
+    # #region agent log
+    try:
+        with open('/Users/jcreed/Documents/GitHub/zstyle-services/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H2",
+                "location": "agents/exec_func_coach/capabilities.py:google_gmail_tool",
+                "message": f"Failed to initialize Google Gmail tool: {str(e)}",
+                "data": {},
+                "timestamp": int(time.time() * 1000)
+            }) + "\n")
+    except:
+        pass
+    # #endregion
+    print(f"WARNING: Google Gmail tool failed to initialize: {e}")
+    google_gmail_tool = None
 
 # =============================================================================
 # GOOGLE SEARCH TOOL

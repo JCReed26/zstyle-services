@@ -22,7 +22,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import uuid
 
-from database.engine import Base
+from database.core import Base
 
 
 def generate_uuid():

@@ -6,7 +6,7 @@ By default, it uses SQLite for development. Uncomment the Supabase section
 for production deployment.
 
 Usage:
-    from database.engine import engine, AsyncSessionLocal, Base, get_db_session
+    from database.core import engine, AsyncSessionLocal, Base, get_db_session
 
 To reset the database during development:
     python reset_db.py

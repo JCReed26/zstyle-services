@@ -15,7 +15,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from database.engine import AsyncSessionLocal
+from database.core import AsyncSessionLocal
 
 
 class ArtifactService:

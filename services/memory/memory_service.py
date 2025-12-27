@@ -44,7 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 import uuid
 
-from database.engine import AsyncSessionLocal
+from database.core import AsyncSessionLocal
 from database.models import UserMemory, MemorySlot
 
 
