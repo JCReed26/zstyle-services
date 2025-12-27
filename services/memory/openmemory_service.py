@@ -1,39 +1,51 @@
 """
 OpenMemory Service Integration
 
-This module handles communication with the OpenMemory service running via Docker.
-It provides methods to add and retrieve memories.
+This module handles the OpenMemory service integration directly using the openmemory-py SDK.
+It runs locally and stores data in a SQLite database.
 """
 import os
-import aiohttp
-from typing import Dict, Any, List, Optional
 import logging
+from typing import Dict, Any, List, Optional
+# The installed package exposes 'Memory' not 'OpenMemory'
+from openmemory import Memory
 
 logger = logging.getLogger(__name__)
 
 class OpenMemoryService:
-    def __init__(self, base_url: Optional[str] = None):
+    def __init__(self, db_path: str = "./zstyle_memory.db"):
         """
-        Initialize the OpenMemory service client.
+        Initialize the OpenMemory service client in local mode.
         
         Args:
-            base_url: The URL of the OpenMemory service. 
-                      Defaults to OPENMEMORY_URL env var or http://localhost:3000
+            db_path: Path to the SQLite database file for memory storage.
         """
-        self.base_url = base_url or os.getenv("OPENMEMORY_URL", "http://localhost:3000")
+        # Configure OpenMemory via environment variables as per its config system
+        # Set DB URL
+        db_url = f"sqlite:///{os.path.abspath(db_path)}"
+        os.environ["OM_DB_URL"] = db_url
+        
+        # Check for OpenAI key, but default to synthetic if not found or empty
+        openai_key = os.getenv("OPENAI_API_KEY")
+        
+        if openai_key:
+            logger.info("Initializing OpenMemory with OpenAI embeddings")
+            os.environ["OM_EMBED_KIND"] = "openai"
+        else:
+            logger.info("Initializing OpenMemory with Synthetic (Local) embeddings")
+            os.environ["OM_EMBED_KIND"] = "synthetic"
+
+        try:
+            self.mem = Memory()
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenMemory: {e}")
+            raise
 
     async def health_check(self) -> bool:
         """
-        Check if the OpenMemory service is reachable.
+        Check if the OpenMemory service is initialized and functional.
         """
-        try:
-            async with aiohttp.ClientSession() as session:
-                # Assuming /health or / root endpoint exists
-                async with session.get(f"{self.base_url}/") as response:
-                    return response.status == 200
-        except Exception as e:
-            logger.warning(f"OpenMemory health check failed: {e}")
-            return False
+        return self.mem is not None
 
     async def add_memory(
         self, 
@@ -50,22 +62,25 @@ class OpenMemoryService:
             metadata: Optional metadata (tags, etc.)
             
         Returns:
-            The response from OpenMemory.
+            The added memory object.
         """
-        payload = {
-            "user_id": user_id,
-            "content": content,
-            "metadata": metadata or {}
-        }
+        tags = (metadata or {}).pop("tags", [])
+        meta = metadata if metadata else {}
+        if "tags" in meta:
+            del meta["tags"]
         
-        async with aiohttp.ClientSession() as session:
-            # Adjust endpoint based on OpenMemory API docs
-            # Placeholder: /api/memories
-            async with session.post(f"{self.base_url}/api/memories", json=payload) as response:
-                if response.status >= 400:
-                    text = await response.text()
-                    raise RuntimeError(f"Failed to add memory: {response.status} - {text}")
-                return await response.json()
+        try:
+            # Memory.add is async - user_id is positional, tags/meta are kwargs
+            result = await self.mem.add(
+                content,
+                user_id=user_id,
+                tags=tags if tags else None,
+                meta=meta if meta else None
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Failed to add memory: {e}")
+            raise RuntimeError(f"Failed to add memory: {e}")
 
     async def search_memories(
         self, 
@@ -84,20 +99,21 @@ class OpenMemoryService:
         Returns:
             List of matching memory objects.
         """
-        params = {
-            "user_id": user_id,
-            "query": query,
-            "limit": limit
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            # Adjust endpoint based on OpenMemory API docs
-            # Placeholder: /api/memories/search
-            async with session.get(f"{self.base_url}/api/memories/search", params=params) as response:
-                if response.status >= 400:
-                    text = await response.text()
-                    raise RuntimeError(f"Failed to search memories: {response.status} - {text}")
-                return await response.json()
+        try:
+            # Memory.search is async - user_id is a parameter, not in filters
+            results = await self.mem.search(
+                query,
+                user_id=user_id,
+                limit=limit
+            )
+            return results
+        except Exception as e:
+            logger.error(f"Failed to search memories: {e}")
+            raise RuntimeError(f"Failed to search memories: {e}")
 
 # Global instance
-openmemory_service = OpenMemoryService()
+try:
+    openmemory_service = OpenMemoryService()
+except Exception as e:
+    logger.error(f"Failed to create global OpenMemoryService instance: {e}")
+    openmemory_service = None

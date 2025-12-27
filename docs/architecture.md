@@ -21,13 +21,14 @@
                                           |
                                           v
 +------------------+        +---------------------------+        +---------------------+
-|  STRUCTURED DB   | <----> |       AGENT LAYER         | <----> | MEMORY & RAG STORE  |
-| (SQLite/Postgres)|        +---------------------------+        | (Google Drive)      |
-| - Users          |        |  exec_func_coach (root)   |        | - Knowledge Base    |
-| - Activity Logs  |        |  - sub_agent_1 (future)   |        | - Second Brain      |
+|  STRUCTURED DB   | <----> |       AGENT LAYER         | <----> |  OPENMEMORY STORE   |
+| (SQLite/Postgres)|        +---------------------------+        | (Local Vector DB)   |
+| - Users          |        |  exec_func_coach (root)   |        | - Semantic Search   |
+| - Activity Logs  |        |  - sub_agent_1 (future)   |        | - RAG Capabilities  |
 | - Credentials    |        |  - sub_agent_2 (future)   |        +---------------------+
 +------------------+        +---------------------------+
                             |  ZStyleMemoryService      |
+                            |  OpenMemoryService        |
                             +---------------------------+
 ```
 
@@ -51,11 +52,11 @@ AI agents powered by Google ADK (Gemini models).
 
 ### 3. Memory Service (`/services/memory/`)
 
-**Memory-First Architecture**: Instead of storing chat history, we use structured memory.
+**Memory-First Architecture**: Instead of storing chat history, we use structured and semantic memory.
 
-- **Standardized Slots**: Well-known memory locations (CURRENT_GOAL, USER_PREFERENCES, etc.)
-- **Flexible Memories**: Agent-specific data with tags for retrieval
-- **UserContext**: Aggregated view for agent injection
+- **ZStyleMemoryService**: Manages standardized slots (CURRENT_GOAL, USER_PREFERENCES, etc.) in the structured SQL database.
+- **OpenMemoryService**: Provides a local vector-based memory engine for semantic search and long-term storage (RAG).
+- **UserContext**: Aggregated view for agent injection, combining both structured and semantic insights.
 
 ### 4. Database (`/database/`)
 

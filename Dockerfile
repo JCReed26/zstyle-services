@@ -16,6 +16,12 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+
+RUN mkdir -p /app/data && chmod 777 /app/data
+# Patch openmemory-py package bug: BaseMessage not defined in except ImportError block
+COPY fix_openmemory.sh .
+RUN chmod +x fix_openmemory.sh && python3 fix_openmemory.sh
+
 # Copy the rest of the application
 COPY . .
 

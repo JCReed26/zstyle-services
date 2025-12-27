@@ -5,7 +5,7 @@ agent-starter-pack
 pydantic
 fastapi
 fastapi-utilities
-openmemory
+openmemory-py
 
 
 mcp

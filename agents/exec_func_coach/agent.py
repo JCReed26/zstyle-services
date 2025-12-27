@@ -38,6 +38,8 @@ from .helpers import (
     set_current_goal,
     get_user_preferences,
     get_user_context,
+    add_long_term_memory,
+    search_long_term_memory,
 )
 
 from .capabilities import (
@@ -101,6 +103,9 @@ def get_default_tools() -> List[Any]:
         set_current_goal,
         get_user_preferences,
         get_user_context,
+        # Long-term memory tools (OpenMemory)
+        add_long_term_memory,
+        search_long_term_memory,
         # Google Workspace tools
         google_calendar_tool,
         google_gmail_tool,  

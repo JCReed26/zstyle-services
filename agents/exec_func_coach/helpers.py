@@ -51,6 +51,7 @@ import urllib.parse
 from database.core import AsyncSessionLocal
 from database.models import Credential, MemorySlot, CredentialType
 from services.memory import memory_service
+from services.memory.openmemory_service import openmemory_service
 
 
 async def _get_credential(user_id: str, credential_type: str) -> Optional[Dict[str, Any]]:
@@ -296,6 +297,67 @@ async def get_user_context(
         return {"status": "success", "context": context}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+async def add_long_term_memory(
+    content: str,
+    tags: Optional[List[str]] = None,
+    tool_context: ToolContext = None
+) -> Dict[str, Any]:
+    """
+    Add a memory to the long-term vector storage for semantic retrieval.
+    Use this for facts, observations, or thoughts that should be recallable later.
+    
+    Args:
+        content: The text content to remember
+        tags: Optional list of tags for categorization
+    """
+    user_id = tool_context.state.get('user_id')
+    if not user_id:
+        return {"status": "error", "message": "User not identified"}
+    
+    if not openmemory_service:
+        return {"status": "error", "message": "Long-term memory service not available"}
+
+    try:
+        result = await openmemory_service.add_memory(
+            user_id=user_id,
+            content=content,
+            metadata={"tags": tags} if tags else {}
+        )
+        return {"status": "success", "message": "Memory stored in long-term storage", "data": result}
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to store memory: {str(e)}"}
+
+
+async def search_long_term_memory(
+    query: str,
+    limit: int = 5,
+    tool_context: ToolContext = None
+) -> Dict[str, Any]:
+    """
+    Search long-term memory for relevant information using semantic search.
+    
+    Args:
+        query: The search query
+        limit: Max number of results (default 5)
+    """
+    user_id = tool_context.state.get('user_id')
+    if not user_id:
+        return {"status": "error", "message": "User not identified"}
+
+    if not openmemory_service:
+        return {"status": "error", "message": "Long-term memory service not available"}
+
+    try:
+        results = await openmemory_service.search_memories(
+            user_id=user_id,
+            query=query,
+            limit=limit
+        )
+        return {"status": "success", "results": results}
+    except Exception as e:
+        return {"status": "error", "message": f"Search failed: {str(e)}"}
 
 
 # =============================================================================

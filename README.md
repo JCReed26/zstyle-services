@@ -20,7 +20,9 @@ telegram_bot - hosts telegram bot with polling
 
 ### Services
 
-- `/services/memory/` - Long-term memory storage & RAG (No sessions just users and memory)
+- `/services/memory/` - Long-term memory storage & RAG
+  - `memory_service.py` - Structured memory slots (goals, preferences, etc.)
+  - `openmemory_service.py` - Local vector-based semantic memory (runs locally, no Docker needed)
 - `/services/artifacts/` - File and document storage
 - `/services/activity_log.py` - Session management
 

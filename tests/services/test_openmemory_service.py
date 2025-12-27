@@ -1,66 +1,63 @@
 import pytest
-import os
 from unittest.mock import MagicMock, patch, AsyncMock
-import aiohttp
 from services.memory.openmemory_service import OpenMemoryService
 
 @pytest.fixture
-def mock_openmemory_service():
+def mock_openmemory_instance():
+    # Patch the Memory class where it is imported in the service module
+    with patch("services.memory.openmemory_service.Memory") as mock_cls:
+        instance = mock_cls.return_value
+        # Make add and search async mocks
+        instance.add = AsyncMock()
+        instance.search = AsyncMock()
+        yield instance
+
+@pytest.fixture
+def service(mock_openmemory_instance):
     return OpenMemoryService()
 
 @pytest.mark.asyncio
-async def test_health_check_failure(mock_openmemory_service):
+async def test_health_check_success(service, mock_openmemory_instance):
     """
-    Test that health check handles connection errors.
+    Test health check returns True when mem is initialized.
     """
-    with patch("aiohttp.ClientSession.get") as mock_get:
-        # Simulate connection error
-        mock_get.side_effect = aiohttp.ClientConnectorError(
-            connection_key=MagicMock(),
-            os_error=OSError("Connection refused")
-        )
-        
-        # We expect it to return False, not raise
-        result = await mock_openmemory_service.health_check()
-        assert result is False
+    result = await service.health_check()
+    assert result is True
 
 @pytest.mark.asyncio
-async def test_add_memory_success(mock_openmemory_service):
+async def test_add_memory_success(service, mock_openmemory_instance):
     """
     Test add_memory success path.
     """
-    with patch("aiohttp.ClientSession.post") as mock_post:
-        # Mock successful response
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json.return_value = {"id": "mem-123", "status": "created"}
-        mock_response.__aenter__.return_value = mock_response
-        mock_post.return_value = mock_response
+    mock_openmemory_instance.add.return_value = {"id": "mem-123", "status": "created"}
 
-        result = await mock_openmemory_service.add_memory("user123", "content", {"tag": "test"})
-        
-        assert result["id"] == "mem-123"
-        mock_post.assert_called_once()
-        # Verify URL and JSON payload
-        args, kwargs = mock_post.call_args
-        assert "/api/memories" in args[0]
-        assert kwargs["json"]["user_id"] == "user123"
+    result = await service.add_memory("user123", "content", {"tags": ["test"], "other": "meta"})
+    
+    assert result["id"] == "mem-123"
+    mock_openmemory_instance.add.assert_called_once()
+    
+    # Verify arguments - content is positional, user_id and others are kwargs
+    args, kwargs = mock_openmemory_instance.add.call_args
+    assert args[0] == "content"  # First positional arg
+    assert kwargs["user_id"] == "user123"
+    assert kwargs["tags"] == ["test"]
+    assert kwargs["meta"] == {"other": "meta"}
 
 @pytest.mark.asyncio
-async def test_search_memories_success(mock_openmemory_service):
+async def test_search_memories_success(service, mock_openmemory_instance):
     """
     Test search_memories success path.
     """
-    with patch("aiohttp.ClientSession.get") as mock_get:
-        # Mock successful response
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json.return_value = [{"id": "mem-1", "content": "match"}]
-        mock_response.__aenter__.return_value = mock_response
-        mock_get.return_value = mock_response
+    mock_openmemory_instance.search.return_value = [{"id": "mem-1", "content": "match"}]
 
-        result = await mock_openmemory_service.search_memories("user123", "query")
-        
-        assert len(result) == 1
-        assert result[0]["content"] == "match"
-        mock_get.assert_called_once()
+    result = await service.search_memories("user123", "query")
+    
+    assert len(result) == 1
+    assert result[0]["content"] == "match"
+    mock_openmemory_instance.search.assert_called_once()
+    
+    # Verify arguments - query is positional, user_id and limit are kwargs
+    args, kwargs = mock_openmemory_instance.search.call_args
+    assert args[0] == "query"  # First positional arg
+    assert kwargs["user_id"] == "user123"
+    assert kwargs["limit"] == 5

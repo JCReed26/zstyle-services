@@ -38,7 +38,7 @@ else:
     # Development: SQLite (default)
     # Use absolute path to match Docker mount point (/app/zstyle.db).
     # Override with SQLITE_DB_PATH if needed.
-    sqlite_path = os.getenv("SQLITE_DB_PATH", "/app/zstyle.db")
+    sqlite_path = os.getenv("SQLITE_DB_PATH", "/app/data/zstyle.db")
     if os.path.isabs(sqlite_path):
         DATABASE_URL = f"sqlite+aiosqlite:///{sqlite_path}"
     else:
