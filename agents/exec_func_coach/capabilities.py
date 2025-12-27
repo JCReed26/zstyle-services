@@ -16,6 +16,8 @@ load_dotenv()
 from google.adk.agents import Agent 
 from google.adk.tools.agent_tool import AgentTool
 
+# Import the specialized agent wrapper
+from .ticktick import ticktick_tool_wrapper
 
 # =============================================================================
 # GOOGLE CALENDAR TOOL
@@ -62,5 +64,7 @@ google_search_subagent = create_google_search_agent('gemini-2.0-flash-exp')
 google_search_tool = GoogleSearchAgentTool(agent=google_search_subagent)
 
 # =============================================================================
-# TickTick MCP Tool
+# TickTick Tool
 # =============================================================================
+# Aliasing the wrapper function as the tool
+ticktick_tool = ticktick_tool_wrapper
