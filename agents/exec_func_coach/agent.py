@@ -40,6 +40,10 @@ from .helpers import (
     get_user_context,
     add_long_term_memory,
     search_long_term_memory,
+    get_ticktick_auth_url,
+    submit_ticktick_auth_code,
+    get_google_auth_url,
+    submit_google_auth_code,
 )
 
 from .capabilities import (
@@ -106,6 +110,11 @@ def get_default_tools() -> List[Any]:
         # Long-term memory tools (OpenMemory)
         add_long_term_memory,
         search_long_term_memory,
+        # OAuth tools
+        get_ticktick_auth_url,
+        submit_ticktick_auth_code,
+        get_google_auth_url,
+        submit_google_auth_code,
         # Google Workspace tools
         google_calendar_tool,
         google_gmail_tool,  

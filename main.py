@@ -213,6 +213,182 @@ async def api_info():
 
 
 # =============================================================================
+# OAUTH CALLBACK ENDPOINTS
+# =============================================================================
+
+@app.get("/api/oauth/ticktick/callback")
+async def ticktick_oauth_callback(code: str = None, state: str = None, error: str = None):
+    """
+    OAuth callback endpoint for TickTick authorization.
+    
+    Handles the redirect from TickTick OAuth flow.
+    """
+    from fastapi.responses import HTMLResponse
+    from agents.exec_func_coach.helpers import submit_ticktick_auth_code
+    
+    if error:
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <body>
+                    <h1>Authorization Failed</h1>
+                    <p>Error: {error}</p>
+                    <p>Please try again.</p>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+    
+    if not code or not state:
+        return HTMLResponse(
+            content="""
+            <html>
+                <body>
+                    <h1>Invalid Request</h1>
+                    <p>Missing code or state parameter.</p>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+    
+    try:
+        # Submit the auth code (state validation happens inside)
+        result = await submit_ticktick_auth_code(
+            code=code,
+            tool_context=None,
+            user_id=None,
+            state=state
+        )
+        
+        if result.get("status") == "success":
+            return HTMLResponse(
+                content="""
+                <html>
+                    <body>
+                        <h1>Authorization Successful!</h1>
+                        <p>TickTick has been successfully connected to your account.</p>
+                        <p>You can close this window and return to the app.</p>
+                    </body>
+                </html>
+                """
+            )
+        else:
+            return HTMLResponse(
+                content=f"""
+                <html>
+                    <body>
+                        <h1>Authorization Failed</h1>
+                        <p>{result.get('message', 'Unknown error occurred')}</p>
+                    </body>
+                </html>
+                """,
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"TickTick OAuth callback error: {e}", exc_info=True)
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <body>
+                    <h1>Internal Error</h1>
+                    <p>An error occurred while processing your authorization.</p>
+                    <p>Please try again later.</p>
+                </body>
+            </html>
+            """,
+            status_code=500
+        )
+
+
+@app.get("/api/oauth/google/callback")
+async def google_oauth_callback(code: str = None, state: str = None, error: str = None):
+    """
+    OAuth callback endpoint for Google (Gmail/Calendar) authorization.
+    
+    Handles the redirect from Google OAuth flow.
+    """
+    from fastapi.responses import HTMLResponse
+    from agents.exec_func_coach.helpers import submit_google_auth_code
+    
+    if error:
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <body>
+                    <h1>Authorization Failed</h1>
+                    <p>Error: {error}</p>
+                    <p>Please try again.</p>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+    
+    if not code or not state:
+        return HTMLResponse(
+            content="""
+            <html>
+                <body>
+                    <h1>Invalid Request</h1>
+                    <p>Missing code or state parameter.</p>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+    
+    try:
+        # Submit the auth code (state validation happens inside)
+        result = await submit_google_auth_code(
+            code=code,
+            tool_context=None,
+            user_id=None,
+            state=state
+        )
+        
+        if result.get("status") == "success":
+            return HTMLResponse(
+                content="""
+                <html>
+                    <body>
+                        <h1>Authorization Successful!</h1>
+                        <p>Google (Gmail and Calendar) has been successfully connected to your account.</p>
+                        <p>You can close this window and return to the app.</p>
+                    </body>
+                </html>
+                """
+            )
+        else:
+            return HTMLResponse(
+                content=f"""
+                <html>
+                    <body>
+                        <h1>Authorization Failed</h1>
+                        <p>{result.get('message', 'Unknown error occurred')}</p>
+                    </body>
+                </html>
+                """,
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Google OAuth callback error: {e}", exc_info=True)
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <body>
+                    <h1>Internal Error</h1>
+                    <p>An error occurred while processing your authorization.</p>
+                    <p>Please try again later.</p>
+                </body>
+            </html>
+            """,
+            status_code=500
+        )
+
+
+# =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
 

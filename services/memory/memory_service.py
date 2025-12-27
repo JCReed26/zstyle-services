@@ -338,8 +338,12 @@ class ZStyleMemoryService:
         """
         context = UserContext(user_id=user_id)
         
-        # Load standardized slots
-        context.timezone = await self.get_memory_slot(user_id, MemorySlot.TIMEZONE)
+        preferences = await self.get_memory_slot(user_id, MemorySlot.USER_PREFERENCES)
+        if preferences and isinstance(preferences, dict):
+            context.timezone = preferences.get("timezone")
+        else:
+            context.timezone = None
+
         context.current_goal = await self.get_memory_slot(user_id, MemorySlot.CURRENT_GOAL)
         context.goal_progress = await self.get_memory_slot(user_id, MemorySlot.GOAL_PROGRESS)
         context.preferences = await self.get_memory_slot(user_id, MemorySlot.USER_PREFERENCES)

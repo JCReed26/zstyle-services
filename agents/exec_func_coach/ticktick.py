@@ -257,7 +257,11 @@ class TickTickAgentTool(AgentTool):
         super().__init__(agent=agent)
     
     async def run_async(self, tool_context: ToolContext, **kwargs) -> Dict[str, Any]:
-        user_id = tool_context.state.get('user_id')
+        user_id = tool_context.state.get('user_id') if tool_context.state else None
+        if not user_id:
+            # Fallback to ContextVar
+            from channels.router import _current_user_id
+            user_id = _current_user_id.get()
         if not user_id:
              return {"status": "error", "message": "User not identified for TickTick access."}
 

@@ -25,8 +25,15 @@ RUN chmod +x fix_openmemory.sh && python3 fix_openmemory.sh
 # Copy the rest of the application
 COPY . .
 
+# Copy entrypoint script and make it executable
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Expose port
 EXPOSE 8000
+
+# Set entrypoint to ensure data directory permissions
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

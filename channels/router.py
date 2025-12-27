@@ -17,6 +17,7 @@ The router is the single point where channels connect to agents.
 Agents never know which channel a message came from - they just see the content.
 """
 import logging
+import contextvars
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -31,6 +32,10 @@ from database.models import ActivityLogSource
 
 
 logger = logging.getLogger(__name__)
+
+# ContextVar to pass user_id through the call stack for tools
+# This is needed because ADK Runner may not automatically populate tool_context.state
+_current_user_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("current_user_id", default=None)
 
 
 class MessageRouter:
@@ -234,20 +239,27 @@ class MessageRouter:
         
         Returns the final text response from the agent.
         """
-        response_parts = []
+        # Set user_id in ContextVar so tools can access it
+        # This is a fallback if ADK Runner doesn't populate tool_context.state
+        token = _current_user_id.set(user_id)
         
-        async for event in self.runner.run_async(
-            user_id=user_id,
-            session_id=session_id,
-            new_message=content
-        ):
-            # Collect final response events
-            if event.is_final_response() and event.content:
-                for part in event.content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        response_parts.append(part.text)
-        
-        return "".join(response_parts) if response_parts else "I don't have a response for that."
+        try:
+            response_parts = []
+            
+            async for event in self.runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                new_message=content
+            ):
+                # Collect final response events
+                if event.is_final_response() and event.content:
+                    for part in event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            response_parts.append(part.text)
+            
+            return "".join(response_parts) if response_parts else "I don't have a response for that."
+        finally:
+            _current_user_id.reset(token)
     
     def clear_user_session(self, user_id: str) -> None:
         """

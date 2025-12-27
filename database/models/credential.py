@@ -31,6 +31,7 @@ class CredentialType(str):
     Use these constants for consistency.
     """
     GOOGLE_OAUTH = "google_oauth"
+    GOOGLE_TOKEN = "google_oauth"  # Alias for backward compatibility
     TELEGRAM_SESSION = "telegram_session"
     TICKTICK_TOKEN = "ticktick_token"
     CUSTOM = "custom"
