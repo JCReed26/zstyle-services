@@ -28,25 +28,21 @@ Instead of relying on chat history, this agent:
 3. Stores important information back to memory
 """
 from google.adk.agents import Agent
-from google.adk.tools.google_search_agent_tool import (
-    create_google_search_agent,
-    GoogleSearchAgentTool,
-)
-from .tools import (
-    # Memory tools
+
+from .helpers import (
     get_current_goal,
     set_current_goal,
     get_user_preferences,
     get_user_context,
-    # Calendar tools
-    get_user_calendar_events,
-    add_calendar_event,
-    delete_calendar_event,
-    create_reminder,
-    # Task tools (placeholders)
-    get_task_list,
-    add_task
 )
+
+from .capabilities import (
+    google_calendar_tool,
+    google_gmail_tool,
+    google_search_tool,
+    ticktick_tool,
+)
+
 from google.adk.tools import ToolContext
 from .prompt import ROOT_PROMPT
 from typing import Dict, Any
@@ -55,15 +51,6 @@ import datetime
 # =============================================================================
 # DATE TOOLS
 # =============================================================================
-
-async def translate_to_timezone(date: str, timezone: str, tool_context: ToolContext) -> Dict[str, Any]:
-    """
-    Translate a date to a different timezone.
-    """
-    try:
-        return {"status": "success", "date": datetime.datetime.strptime(date, "%Y-%m-%d").astimezone(timezone).strftime("%Y-%m-%d")}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 async def get_todays_date(tool_context: ToolContext) -> Dict[str, Any]:
     """
@@ -102,16 +89,6 @@ async def get_timezone(tool_context: ToolContext) -> Dict[str, Any]:
     return {"status": "success", "timezone": datetime.datetime.now().strftime("%Z")}
 
 
-
-# =============================================================================
-# GOOGLE SEARCH TOOL
-# =============================================================================
-
-google_search_subagent = create_google_search_agent('gemini-2.0-flash-exp')
-google_search_tool = GoogleSearchAgentTool(agent=google_search_subagent)
-
-
-
 # Define the executive function coach agent with tools
 root_agent = Agent(
     model='gemini-2.0-flash-exp',
@@ -124,14 +101,10 @@ root_agent = Agent(
         set_current_goal,
         get_user_preferences,
         get_user_context,
-        # Calendar tools
-        get_user_calendar_events,
-        add_calendar_event,
-        delete_calendar_event,
-        create_reminder,
-        # Task tools
-        get_task_list,
-        add_task,
+        # Google Workspace tools
+        google_calendar_tool,
+        google_gmail_tool,  
+        ticktick_tool,
         # Date tools
         get_todays_date,
         get_day_of_week,
@@ -139,8 +112,7 @@ root_agent = Agent(
         get_year,
         get_time,
         get_timezone,
-        translate_to_timezone,
-        # Google search agent
+        # google search 
         google_search_tool,
     ],
     # Sub-agents can be added here as the system grows
