@@ -238,7 +238,10 @@ class MessageRouter:
         Run the agent and collect the response.
         
         Returns the final text response from the agent.
+        Sanitizes user_id from responses for privacy.
         """
+        import re
+        
         # Set user_id in ContextVar so tools can access it
         # This is a fallback if ADK Runner doesn't populate tool_context.state
         token = _current_user_id.set(user_id)
@@ -257,7 +260,20 @@ class MessageRouter:
                         if hasattr(part, 'text') and part.text:
                             response_parts.append(part.text)
             
-            return "".join(response_parts) if response_parts else "I don't have a response for that."
+            response_text = "".join(response_parts) if response_parts else "I don't have a response for that."
+            
+            # Sanitize user_id from response (privacy protection)
+            # Replace UUID patterns with [user]
+            response_text = re.sub(
+                r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
+                '[user]',
+                response_text,
+                flags=re.IGNORECASE
+            )
+            # Also replace the specific user_id if it appears
+            response_text = response_text.replace(user_id, '[user]')
+            
+            return response_text
         finally:
             _current_user_id.reset(token)
     

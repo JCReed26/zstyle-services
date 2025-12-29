@@ -12,8 +12,9 @@ from google.adk.tools import ToolContext
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.google_api_tool.google_api_toolsets import CalendarToolset
 
-from .helpers import _get_credential
-from database.models import CredentialType
+# Removed: from .helpers import _get_credential
+# Removed: from database.models import CredentialType
+# Agents never import credential helpers directly
 
 # ContextVar for Calendar token injection
 _current_calendar_token: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("calendar_token", default=None)
@@ -67,21 +68,22 @@ class CalendarAgentTool(AgentTool):
         if not user_id:
              return {"status": "error", "message": "User not identified for Calendar access."}
 
-        # 1. Retrieve Credential
-        cred = await _get_credential(user_id, CredentialType.GOOGLE_OAUTH)
-        if not cred:
+        # Get token from AuthService (agents never see tokens directly)
+        from services.auth import AuthService
+        token = await AuthService.get_google_token(user_id)
+        if not token:
              return {
                  "status": "error", 
                  "message": "Calendar authentication missing. Please authorize access."
              }
         
-        # 2. Inject Credential
-        token = _current_calendar_token.set(cred.get('token'))
+        # Inject token via ContextVar
+        token_var = _current_calendar_token.set(token)
         
         try:
             return await super().run_async(tool_context, **kwargs)
         finally:
-            _current_calendar_token.reset(token)
+            _current_calendar_token.reset(token_var)
 
 # Export wrapped tool
 calendar_tool = CalendarAgentTool(agent=calendar_agent)

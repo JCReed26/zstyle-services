@@ -16,6 +16,12 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Cloud SQL Proxy for local development/testing
+# (Not needed for Cloud Run, but useful for local Cloud SQL connections)
+RUN apt-get update && apt-get install -y wget && \
+    wget https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 -O /usr/local/bin/cloud_sql_proxy && \
+    chmod +x /usr/local/bin/cloud_sql_proxy && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /app/data && chmod 777 /app/data
 # Patch openmemory-py package bug: BaseMessage not defined in except ImportError block
@@ -36,5 +42,6 @@ EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use PORT env var (Cloud Run sets this)
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
 

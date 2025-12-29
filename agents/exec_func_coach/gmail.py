@@ -12,8 +12,9 @@ from google.adk.tools import ToolContext
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.google_api_tool.google_api_toolsets import GmailToolset
 
-from .helpers import _get_credential
-from database.models import CredentialType
+# Removed: from .helpers import _get_credential
+# Removed: from database.models import CredentialType
+# Agents never import credential helpers directly
 
 # ContextVar for Gmail token injection
 # Note: Google API Toolsets often expect env vars or credentials files.
@@ -75,32 +76,22 @@ class GmailAgentTool(AgentTool):
         if not user_id:
              return {"status": "error", "message": "User not identified for Gmail access."}
 
-        # 1. Retrieve Credential
-        cred = await _get_credential(user_id, CredentialType.GOOGLE_OAUTH)
-        if not cred:
+        # Get token from AuthService (agents never see tokens directly)
+        from services.auth import AuthService
+        token = await AuthService.get_google_token(user_id)
+        if not token:
              return {
                  "status": "error", 
                  "message": "Gmail authentication missing. Please authorize access."
              }
         
-        # 2. Inject Credential
-        # The ADK Gmail toolset might look for credentials in specific places.
-        # This implementation depends heavily on how GmailToolset consumes auth.
-        # If it uses google-auth library, we might need to construct a Credentials object
-        # and monkey-patch or pass it.
-        
-        # For this implementation, we will assume a mechanism similar to TickTick
-        # or that we can pass the token. Since GmailToolset is a wrapper,
-        # we might need to rely on the environment or a custom credentials provider.
-        
-        # TODO: Implement robust token injection for Google tools. 
-        # For now, we set the context var which can be used by a custom auth provider.
-        token = _current_gmail_token.set(cred.get('token'))
+        # Inject token via ContextVar
+        token_var = _current_gmail_token.set(token)
         
         try:
             return await super().run_async(tool_context, **kwargs)
         finally:
-            _current_gmail_token.reset(token)
+            _current_gmail_token.reset(token_var)
 
 # Export wrapped tool
 gmail_tool = GmailAgentTool(agent=gmail_agent)

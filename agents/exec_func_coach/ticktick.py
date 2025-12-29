@@ -15,8 +15,9 @@ from google.adk.tools.openapi_tool.openapi_spec_parser.openapi_toolset import Op
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools import ToolContext
 
-from .helpers import _get_credential
-from database.models import CredentialType
+# Removed: from .helpers import _get_credential
+# Removed: from database.models import CredentialType
+# Agents never import credential helpers directly
 
 # ContextVar to hold the current user's access token during execution
 _current_ticktick_token: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("ticktick_token", default=None)
@@ -265,22 +266,23 @@ class TickTickAgentTool(AgentTool):
         if not user_id:
              return {"status": "error", "message": "User not identified for TickTick access."}
 
-        # 1. Retrieve Credential
-        cred = await _get_credential(user_id, CredentialType.TICKTICK_TOKEN)
-        if not cred or not cred.get('token'):
+        # Get token from AuthService (agents never see tokens directly)
+        from services.auth import AuthService
+        token = await AuthService.get_ticktick_token(user_id)
+        if not token:
              return {
                  "status": "error", 
-                 "message": "TickTick authentication missing. Please use the auth tool to login."
+                 "message": "TickTick authentication not configured."
              }
         
-        # 2. Set ContextVar for the duration of this call
-        token = _current_ticktick_token.set(cred['token'])
+        # Set ContextVar for the duration of this call
+        token_var = _current_ticktick_token.set(token)
         try:
-            # 3. Delegate to standard AgentTool execution
+            # Delegate to standard AgentTool execution
             return await super().run_async(tool_context, **kwargs)
         finally:
-            # 4. Clean up
-            _current_ticktick_token.reset(token)
+            # Clean up
+            _current_ticktick_token.reset(token_var)
 
 # Export the tool wrapper for use in capabilities.py
 ticktick_tool_wrapper = TickTickAgentTool(agent=ticktick_agent)

@@ -46,3 +46,7 @@ watchdog
 pytest
 pytest-asyncio
 httpx
+
+# Google Cloud Platform
+google-cloud-secret-manager
+google-cloud-logging

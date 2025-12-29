@@ -40,10 +40,11 @@ from .helpers import (
     get_user_context,
     add_long_term_memory,
     search_long_term_memory,
-    get_ticktick_auth_url,
-    submit_ticktick_auth_code,
-    get_google_auth_url,
-    submit_google_auth_code,
+    # OAuth initiation tools - URLs are logged, agent never sees tokens
+    initiate_ticktick_auth,
+    initiate_google_auth,
+    check_ticktick_auth_status,
+    check_google_auth_status,
 )
 
 from .capabilities import (
@@ -110,11 +111,11 @@ def get_default_tools() -> List[Any]:
         # Long-term memory tools (OpenMemory)
         add_long_term_memory,
         search_long_term_memory,
-        # OAuth tools
-        get_ticktick_auth_url,
-        submit_ticktick_auth_code,
-        get_google_auth_url,
-        submit_google_auth_code,
+        # OAuth initiation tools (URLs logged, not returned to agent)
+        initiate_ticktick_auth,
+        initiate_google_auth,
+        check_ticktick_auth_status,
+        check_google_auth_status,
         # Google Workspace tools
         google_calendar_tool,
         google_gmail_tool,  

@@ -1,0 +1,121 @@
+steps:
+  # Install dependencies and run tests
+  - name: 'python:3.11'
+    entrypoint: 'pip'
+    args: ['install', '-r', 'requirements.txt']
+    id: 'install-deps'
+
+  - name: 'python:3.11'
+    entrypoint: 'pytest'
+    args: ['tests/', '-v', '--tb=short']
+    id: 'run-tests'
+    waitFor: ['install-deps']
+
+  # Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:latest'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
+      - '.'
+    id: 'build-image'
+    waitFor: ['run-tests']
+
+  # Push Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:latest']
+    id: 'push-image-latest'
+    waitFor: ['build-image']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA']
+    id: 'push-image-tagged'
+    waitFor: ['build-image']
+
+  # Deploy to Cloud Run - Main App
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '$_SERVICE_NAME'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+    id: 'deploy-main'
+    waitFor: ['push-image-tagged']
+
+  # Deploy to Cloud Run - Telegram Bot
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}-telegram-bot'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:$SHORT_SHA'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--command'
+      - 'python'
+      - '--args'
+      - '-m,channels.telegram_bot'
+      - '--allow-unauthenticated'
+    id: 'deploy-telegram-bot'
+    waitFor: ['push-image-tagged']
+
+  # Integration tests - Health check
+  - name: 'python:3.11'
+    entrypoint: 'python'
+    args:
+      - '-c'
+      - |
+        import requests
+        import sys
+        import time
+        
+        # Get service URL from Cloud Run
+        import subprocess
+        result = subprocess.run(
+            ['gcloud', 'run', 'services', 'describe', '$_SERVICE_NAME', 
+             '--region', '$_REGION', '--format', 'value(status.url)'],
+            capture_output=True, text=True
+        )
+        url = result.stdout.strip()
+        
+        # Wait for service to be ready
+        time.sleep(10)
+        
+        # Test health endpoint
+        response = requests.get(f'{url}/health', timeout=30)
+        if response.status_code != 200:
+            print(f'Health check failed: {response.status_code}')
+            sys.exit(1)
+        
+        data = response.json()
+        if data.get('status') != 'healthy' and data.get('status') != 'degraded':
+            print(f'Service unhealthy: {data}')
+            sys.exit(1)
+        
+        print(f'Health check passed: {data}')
+    id: 'integration-test-health'
+    waitFor: ['deploy-main']
+
+substitutions:
+  _SERVICE_NAME: 'zstyle-services'
+  _REGION: 'us-central1'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: '1200s'
+

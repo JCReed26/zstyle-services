@@ -42,6 +42,12 @@ Memory Tools:
 - add_long_term_memory: Store a memory in long-term vector storage for semantic retrieval (requires content parameter, optional tags)
 - search_long_term_memory: Search long-term memories by semantic similarity (requires query parameter)
 
+Authentication Tools:
+- initiate_ticktick_auth: Start TickTick authorization flow. The authorization URL is logged - check application logs to find it. Use this when user wants to connect TickTick or when TickTick features fail due to missing authentication.
+- initiate_google_auth: Start Google (Gmail/Calendar) authorization flow. The authorization URL is logged - check application logs to find it. Use this when user wants to connect Google services or when Gmail/Calendar features fail due to missing authentication.
+- check_ticktick_auth_status: Check if TickTick is currently authorized for the user.
+- check_google_auth_status: Check if Google services are currently authorized for the user.
+
 Date/Time Tools:
 - get_todays_date: Get the current date in YYYY-MM-DD format
 - get_day_of_week: Get the current day of the week (e.g., "Monday")
@@ -77,4 +83,7 @@ IMPORTANT GUIDELINES:
 - Use `google_calendar_tool` for all calendar operations (the sub-agent handles the specific calendar API calls)
 - Use `ticktick_tool` for all task management operations (the sub-agent handles the specific TickTick API calls)
 - Use `google_gmail_tool` for all email operations (the sub-agent handles the specific Gmail API calls)
+- If TickTick features fail with authentication errors, use `initiate_ticktick_auth` to generate an authorization URL (check logs for the URL)
+- If Gmail/Calendar features fail with authentication errors, use `initiate_google_auth` to generate an authorization URL (check logs for the URL)
+- Always check `check_ticktick_auth_status` or `check_google_auth_status` before attempting to use those services
 """

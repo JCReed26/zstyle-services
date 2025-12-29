@@ -37,6 +37,7 @@ from typing import AsyncGenerator
 import uvicorn
 from fastapi import FastAPI
 from dotenv import load_dotenv
+from sqlalchemy import text
 
 from google.adk.cli.fast_api import get_fast_api_app
 from database.core import engine, Base
@@ -48,11 +49,22 @@ from database.models import User, UserMemory, ActivityLog, Credential
 load_dotenv()
 
 # Setup logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=getattr(logging, log_level, logging.INFO)
 )
+
+# Cloud Logging integration (if in GCP)
 logger = logging.getLogger(__name__)
+if os.getenv("GOOGLE_CLOUD_PROJECT"):
+    try:
+        import google.cloud.logging
+        client = google.cloud.logging.Client()
+        client.setup_logging()
+        logger.info("Cloud Logging enabled")
+    except Exception:
+        pass  # Fallback to standard logging
 
 # Create agent directory path
 agent_directory = os.path.dirname(os.path.abspath(__file__)) + "/agents"
@@ -75,19 +87,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     # Initialize database tables
     logger.info("Initializing database...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database initialized.")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}", exc_info=True)
+        # Don't fail startup - let health check handle it
+        logger.warning("Continuing with degraded database connectivity")
     
     logger.info(f"Agents directory: {AGENTS_DIR}")
-    logger.info("ADK Dev UI available at: http://localhost:8000")
     logger.info("=" * 50)
     
     yield
     
     # Shutdown
     logger.info("Shutting down ZStyle Services...")
-    await engine.dispose()
+    try:
+        await engine.dispose()
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
     logger.info("Shutdown complete.")
 
 
@@ -186,12 +205,26 @@ async def chat_bridge(request: BridgeRequest):
 async def health_check():
     """
     Health check endpoint for container orchestration.
+    Includes database connectivity check.
     """
-    return {
+    health_status = {
         "status": "healthy",
         "service": "zstyle-services",
-        "agents_dir": AGENTS_DIR
+        "agents_dir": AGENTS_DIR,
+        "database": "unknown"
     }
+    
+    # Check database connectivity
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        health_status["database"] = "connected"
+    except Exception as e:
+        health_status["database"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+        return health_status, 503
+    
+    return health_status
 
 
 @app.get("/api/info")
@@ -216,101 +249,13 @@ async def api_info():
 # OAUTH CALLBACK ENDPOINTS
 # =============================================================================
 
-@app.get("/api/oauth/ticktick/callback")
-async def ticktick_oauth_callback(code: str = None, state: str = None, error: str = None):
-    """
-    OAuth callback endpoint for TickTick authorization.
-    
-    Handles the redirect from TickTick OAuth flow.
-    """
-    from fastapi.responses import HTMLResponse
-    from agents.exec_func_coach.helpers import submit_ticktick_auth_code
-    
-    if error:
-        return HTMLResponse(
-            content=f"""
-            <html>
-                <body>
-                    <h1>Authorization Failed</h1>
-                    <p>Error: {error}</p>
-                    <p>Please try again.</p>
-                </body>
-            </html>
-            """,
-            status_code=400
-        )
-    
-    if not code or not state:
-        return HTMLResponse(
-            content="""
-            <html>
-                <body>
-                    <h1>Invalid Request</h1>
-                    <p>Missing code or state parameter.</p>
-                </body>
-            </html>
-            """,
-            status_code=400
-        )
-    
-    try:
-        # Submit the auth code (state validation happens inside)
-        result = await submit_ticktick_auth_code(
-            code=code,
-            tool_context=None,
-            user_id=None,
-            state=state
-        )
-        
-        if result.get("status") == "success":
-            return HTMLResponse(
-                content="""
-                <html>
-                    <body>
-                        <h1>Authorization Successful!</h1>
-                        <p>TickTick has been successfully connected to your account.</p>
-                        <p>You can close this window and return to the app.</p>
-                    </body>
-                </html>
-                """
-            )
-        else:
-            return HTMLResponse(
-                content=f"""
-                <html>
-                    <body>
-                        <h1>Authorization Failed</h1>
-                        <p>{result.get('message', 'Unknown error occurred')}</p>
-                    </body>
-                </html>
-                """,
-                status_code=400
-            )
-    except Exception as e:
-        logger.error(f"TickTick OAuth callback error: {e}", exc_info=True)
-        return HTMLResponse(
-            content=f"""
-            <html>
-                <body>
-                    <h1>Internal Error</h1>
-                    <p>An error occurred while processing your authorization.</p>
-                    <p>Please try again later.</p>
-                </body>
-            </html>
-            """,
-            status_code=500
-        )
-
-
 @app.get("/api/oauth/google/callback")
 async def google_oauth_callback(code: str = None, state: str = None, error: str = None):
     """
     OAuth callback endpoint for Google (Gmail/Calendar) authorization.
-    
-    Handles the redirect from Google OAuth flow.
     """
     from fastapi.responses import HTMLResponse
-    from agents.exec_func_coach.helpers import submit_google_auth_code
+    from services.auth.oauth_service import oauth_service
     
     if error:
         return HTMLResponse(
@@ -340,21 +285,15 @@ async def google_oauth_callback(code: str = None, state: str = None, error: str 
         )
     
     try:
-        # Submit the auth code (state validation happens inside)
-        result = await submit_google_auth_code(
-            code=code,
-            tool_context=None,
-            user_id=None,
-            state=state
-        )
+        success, error_msg = await oauth_service.handle_google_callback(code, state)
         
-        if result.get("status") == "success":
+        if success:
             return HTMLResponse(
                 content="""
                 <html>
                     <body>
                         <h1>Authorization Successful!</h1>
-                        <p>Google (Gmail and Calendar) has been successfully connected to your account.</p>
+                        <p>Google (Gmail and Calendar) has been successfully connected.</p>
                         <p>You can close this window and return to the app.</p>
                     </body>
                 </html>
@@ -366,7 +305,7 @@ async def google_oauth_callback(code: str = None, state: str = None, error: str 
                 <html>
                     <body>
                         <h1>Authorization Failed</h1>
-                        <p>{result.get('message', 'Unknown error occurred')}</p>
+                        <p>{error_msg or 'Unknown error occurred'}</p>
                     </body>
                 </html>
                 """,
@@ -375,7 +314,7 @@ async def google_oauth_callback(code: str = None, state: str = None, error: str 
     except Exception as e:
         logger.error(f"Google OAuth callback error: {e}", exc_info=True)
         return HTMLResponse(
-            content=f"""
+            content="""
             <html>
                 <body>
                     <h1>Internal Error</h1>
@@ -386,6 +325,122 @@ async def google_oauth_callback(code: str = None, state: str = None, error: str 
             """,
             status_code=500
         )
+
+
+@app.get("/api/oauth/google/authorize")
+async def google_oauth_authorize(user_id: str):
+    """
+    Generate Google OAuth authorization URL.
+    
+    This is a standalone endpoint, not an agent tool.
+    Agents never handle OAuth directly.
+    """
+    from services.auth.oauth_service import oauth_service
+    from fastapi.responses import RedirectResponse
+    
+    try:
+        auth_url = oauth_service.get_google_auth_url(user_id)
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        logger.error(f"Failed to generate Google OAuth URL: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/api/oauth/ticktick/callback")
+async def ticktick_oauth_callback(code: str = None, state: str = None, error: str = None):
+    """
+    OAuth callback endpoint for TickTick authorization.
+    """
+    from fastapi.responses import HTMLResponse
+    from services.auth.oauth_service import oauth_service
+    
+    if error:
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <body>
+                    <h1>Authorization Failed</h1>
+                    <p>Error: {error}</p>
+                    <p>Please try again.</p>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+    
+    if not code or not state:
+        return HTMLResponse(
+            content="""
+            <html>
+                <body>
+                    <h1>Invalid Request</h1>
+                    <p>Missing code or state parameter.</p>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+    
+    try:
+        success, error_msg = await oauth_service.handle_ticktick_callback(code, state)
+        
+        if success:
+            return HTMLResponse(
+                content="""
+                <html>
+                    <body>
+                        <h1>Authorization Successful!</h1>
+                        <p>TickTick has been successfully connected.</p>
+                        <p>You can close this window and return to the app.</p>
+                    </body>
+                </html>
+                """
+            )
+        else:
+            return HTMLResponse(
+                content=f"""
+                <html>
+                    <body>
+                        <h1>Authorization Failed</h1>
+                        <p>{error_msg or 'Unknown error occurred'}</p>
+                    </body>
+                </html>
+                """,
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"TickTick OAuth callback error: {e}", exc_info=True)
+        return HTMLResponse(
+            content="""
+            <html>
+                <body>
+                    <h1>Internal Error</h1>
+                    <p>An error occurred while processing your authorization.</p>
+                    <p>Please try again later.</p>
+                </body>
+            </html>
+            """,
+            status_code=500
+        )
+
+
+@app.get("/api/oauth/ticktick/authorize")
+async def ticktick_oauth_authorize(user_id: str):
+    """
+    Generate TickTick OAuth authorization URL.
+    
+    This is a standalone endpoint, not an agent tool.
+    Agents never handle OAuth directly.
+    """
+    from services.auth.oauth_service import oauth_service
+    from fastapi.responses import RedirectResponse
+    
+    try:
+        auth_url = oauth_service.get_ticktick_auth_url(user_id)
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        logger.error(f"Failed to generate TickTick OAuth URL: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 # =============================================================================
