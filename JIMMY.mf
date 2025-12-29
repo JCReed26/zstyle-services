@@ -1,0 +1,1 @@
+we need to deploy with the terraform code but specifically work on bugs so get run locally on home machine to operate as server.
