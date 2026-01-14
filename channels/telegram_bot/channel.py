@@ -48,7 +48,7 @@ from channels.base import (
     NormalizedMessage,
     MessageType,
 )
-from database.engine import AsyncSessionLocal
+from database.core import AsyncSessionLocal
 from database.models import User
 from sqlalchemy import select
 
@@ -281,6 +281,9 @@ class TelegramChannel(ConversationalChannel):
         
         await update.message.reply_text(f"**Recent Activity:**\n\n```\n{formatted}\n```", parse_mode="Markdown")
     
+    async def _cmd_authorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        pass
+
     # =========================================================================
     # MESSAGE HANDLERS
     # =========================================================================

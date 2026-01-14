@@ -110,7 +110,7 @@ class NormalizedMessage:
     All channel-specific data is preserved in raw_event for special handling.
     
     Attributes:
-        channel: Source channel identifier ("telegram", "discord", "api", etc.)
+        channel: Source channel identifier ("telegram", "api", etc.)
         user_id: Internal ZStyle user ID (may differ from channel's user ID)
         channel_user_id: Original user ID from the channel (for mapping)
         session_id: Conversation session ID (for context grouping)
