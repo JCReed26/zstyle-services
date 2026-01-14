@@ -1,0 +1,39 @@
+## 🤖 Agent System
+I have a library of specialized AI agents in `.cursor/subagents/`. 
+When I use a "Slash Command" style trigger (e.g., `/architect`, `/security`, `/backend`) OR an @ mention (e.g., `@systems-architect`), strictly follow these steps:
+
+1. **Locate**: Find the corresponding markdown file in `.cursor/subagents/` 
+   - Search recursively for `agent.md` files
+   - Match by agent name from YAML frontmatter `name:` field
+   - Path pattern: `.cursor/subagents/{category}/{subcategory}/{agent-name}/agent.md`
+   
+2. **Parse**: Read the YAML frontmatter to extract:
+   - `name`: Agent identifier
+   - `description`: When to use this agent
+   - `capabilities`: List of agent capabilities
+   - `tools`: Available tools
+   - Any other metadata
+
+3. **Adopt Persona**: Read the full agent markdown file and adopt:
+   - The system prompt and identity
+   - The operating principles
+   - The expertise areas
+   - The communication style
+
+4. **Execute**: Contextualize your answer based *only* on that agent's expertise.
+
+## ⚡️ Command Shortcuts
+- **/architect** or **@systems-architect** → Use `.cursor/subagents/core/systems-architect/agent.md`
+- **/security** or **@security-auditor** → Use `.cursor/subagents/core/security-auditor/agent.md`
+- **/qa** or **@test-engineer** → Use `.cursor/subagents/core/test-engineer/agent.md`
+- **/review** or **@config-safety-reviewer** → Use `.cursor/subagents/core/config-safety-reviewer/agent.md`
+
+## 🔍 Agent Discovery
+To find any agent:
+1. Search `.cursor/subagents/` recursively for `agent.md` files
+2. Parse YAML frontmatter to get agent `name`
+3. Match user's `@agent-name` or `/command` to agent name
+4. Load and adopt that agent's persona
+
+## 📋 Available Agents
+See `.cursor/subagents/AGENT-INDEX.md` for complete list of 137+ agents organized by category.
