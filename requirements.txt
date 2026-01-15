@@ -4,6 +4,7 @@ a2a
 agent-starter-pack
 ticktick-py
 pydantic
+pydantic-settings
 fastapi
 fastapi-utilities
 

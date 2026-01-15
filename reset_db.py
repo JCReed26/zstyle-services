@@ -13,11 +13,11 @@ WARNING: This will DELETE all data in the database!
 import asyncio
 import sys
 
-from database.engine import engine, Base
+from core.database.engine import engine, Base
 
 # Import all models to ensure they're registered with Base.metadata
 # This is required for create_all() to know about all tables
-from database.models import User, UserMemory, ActivityLog, Credential
+from core.database.models import User, ActivityLog, Credential
 
 
 async def reset_db():

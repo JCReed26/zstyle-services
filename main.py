@@ -36,22 +36,19 @@ from typing import AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI
-from dotenv import load_dotenv
 
 from google.adk.cli.fast_api import get_fast_api_app
-from database.engine import engine, Base
+from core.database.engine import engine, Base
 
 # Import all models to ensure they're registered with Base.metadata
-from database.models import User, UserMemory, ActivityLog, Credential
+from core.database.models import User, ActivityLog, Credential
 
-# Load environment variables
-load_dotenv()
+# Import core configuration and logging
+from core.config import settings
+from core.logger import setup_logging
 
-# Setup logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# Setup logging (must be called after importing settings)
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Create agent directory path
@@ -101,7 +98,7 @@ app = get_fast_api_app(
     web=True,      # Enable ADK Dev UI
     a2a=False,     # A2A disabled for now (enable when adding agent-to-agent)
     host="0.0.0.0",
-    port=8000,
+    port=settings.PORT,
     lifespan=lifespan
 )
 
@@ -217,16 +214,14 @@ async def api_info():
 # =============================================================================
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    
     logger.info("=" * 50)
     logger.info("Starting ZStyle Services (Development Mode)")
-    logger.info(f"Port: {port}")
+    logger.info(f"Port: {settings.PORT}")
     logger.info("=" * 50)
     
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=port,
+        port=settings.PORT,
         reload=True
     )

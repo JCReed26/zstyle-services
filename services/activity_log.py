@@ -26,8 +26,8 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
-from database.engine import AsyncSessionLocal
-from database.models import ActivityLog, ActivityLogSource
+from core.database.engine import AsyncSessionLocal
+from core.database.models import ActivityLog, ActivityLogSource
 
 
 class ActivityLogService:

@@ -48,9 +48,8 @@ from channels.base import (
     NormalizedMessage,
     MessageType,
 )
-from database.core import AsyncSessionLocal
-from database.models import User
-from sqlalchemy import select
+from core.database.engine import AsyncSessionLocal
+from core.database.repositories import UserRepository
 
 
 logger = logging.getLogger(__name__)
@@ -533,24 +532,20 @@ class TelegramChannel(ConversationalChannel):
             return self._user_id_cache[telegram_id]
         
         async with AsyncSessionLocal() as db:
+            repo = UserRepository(db)
+            
             # Check database
-            result = await db.execute(
-                select(User).where(User.telegram_id == telegram_id)
-            )
-            user = result.scalar_one_or_none()
+            user = await repo.get_by_telegram_id(telegram_id)
             
             if user:
                 self._user_id_cache[telegram_id] = user.id
                 return user.id
             
             # Create new user
-            user = User(
+            user = await repo.create(
                 telegram_id=telegram_id,
                 username=username
             )
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
             
             self._user_id_cache[telegram_id] = user.id
             logger.info(f"Created new user {user.id} for Telegram ID {telegram_id}")
