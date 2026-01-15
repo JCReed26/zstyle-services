@@ -229,9 +229,11 @@ async def chat_bridge(request: BridgeRequest):
 
 from interface.oauth.google import router as google_oauth_router
 from interface.oauth.ticktick import router as ticktick_oauth_router
+from interface.api.routes import router as api_router
 
 app.include_router(google_oauth_router)
 app.include_router(ticktick_oauth_router)
+app.include_router(api_router, prefix="/api")
 
 
 # =============================================================================
