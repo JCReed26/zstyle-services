@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     Handles:
     - Database initialization on startup
+    - TelegramChannel initialization for webhook processing
     - Cleanup on shutdown
     """
     # Startup
@@ -76,6 +77,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database initialized.")
     
+    # Initialize TelegramChannel for webhook processing
+    await _init_telegram_channel()
+    
     logger.info(f"Agents directory: {AGENTS_DIR}")
     logger.info("ADK Dev UI available at: http://localhost:8000")
     logger.info("=" * 50)
@@ -84,6 +88,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     # Shutdown
     logger.info("Shutting down ZStyle Services...")
+    
+    # Stop TelegramChannel if initialized
+    global _telegram_channel
+    if _telegram_channel:
+        try:
+            await _telegram_channel.stop()
+            logger.info("TelegramChannel stopped")
+        except Exception as e:
+            logger.error(f"Error stopping TelegramChannel: {e}")
+    
     await engine.dispose()
     logger.info("Shutdown complete.")
 
@@ -126,6 +140,33 @@ bridge_runner = Runner(
     memory_service=memory_service
 )
 message_router = MessageRouter(runner=bridge_runner, app_name="zstyle-bridge", session_service=bridge_session_service)
+
+# Global TelegramChannel instance (initialized in lifespan)
+_telegram_channel = None
+
+async def _init_telegram_channel():
+    """Initialize TelegramChannel and connect to message router."""
+    global _telegram_channel
+    try:
+        from channels.telegram_bot import TelegramChannel
+        from interface.telegram_webhook import set_telegram_channel
+        
+        logger.info("Initializing TelegramChannel for webhook processing...")
+        _telegram_channel = TelegramChannel()
+        
+        # Set message handler to route messages through message_router
+        _telegram_channel.set_message_handler(message_router.route)
+        
+        # Initialize Application for bot operations (without polling)
+        await _telegram_channel.start()
+        
+        # Set telegram channel for webhook router
+        set_telegram_channel(_telegram_channel)
+        logger.info("TelegramChannel initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize TelegramChannel: {e}")
+        logger.warning("Webhook endpoint will not be available")
+        _telegram_channel = None
 
 class BridgeRequest(BaseModel):
     """
@@ -183,6 +224,17 @@ async def chat_bridge(request: BridgeRequest):
 
 
 # =============================================================================
+# OAUTH ROUTERS
+# =============================================================================
+
+from interface.oauth.google import router as google_oauth_router
+from interface.oauth.ticktick import router as ticktick_oauth_router
+
+app.include_router(google_oauth_router)
+app.include_router(ticktick_oauth_router)
+
+
+# =============================================================================
 # CUSTOM ENDPOINTS
 # =============================================================================
 
@@ -211,9 +263,18 @@ async def api_info():
             "health": "/health",
             "adk_ui": "/",
             "agent_run": "/run",
-            "sessions": "/apps/{app_name}/users/{user_id}/sessions"
+            "sessions": "/apps/{app_name}/users/{user_id}/sessions",
+            "telegram_webhook": "/webhook/telegram"
         }
     }
+
+
+# =============================================================================
+# WEBHOOK ROUTER
+# =============================================================================
+from interface.telegram_webhook import router as webhook_router
+
+app.include_router(webhook_router)
 
 
 # =============================================================================

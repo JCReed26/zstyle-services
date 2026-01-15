@@ -91,6 +91,9 @@ class TelegramChannel(ConversationalChannel):
     async def start(self) -> None:
         """
         Initialize and start the Telegram bot.
+        
+        Note: For webhook mode, initialize() and start() are called separately.
+        This method is kept for backward compatibility with polling mode.
         """
         logger.info("Starting Telegram channel...")
         
@@ -100,10 +103,12 @@ class TelegramChannel(ConversationalChannel):
         # Setup handlers
         self._setup_handlers()
         
-        # Start polling
+        # Initialize and start (without polling for webhook mode)
         await self.application.initialize()
         await self.application.start()
-        await self.application.updater.start_polling()
+        
+        # Note: Polling is removed - use webhook mode instead
+        # For polling mode, call: await self.application.updater.start_polling()
         
         logger.info("Telegram channel started successfully")
     
@@ -550,6 +555,76 @@ class TelegramChannel(ConversationalChannel):
             self._user_id_cache[telegram_id] = user.id
             logger.info(f"Created new user {user.id} for Telegram ID {telegram_id}")
             return user.id
+    
+    # =========================================================================
+    # WEBHOOK SUPPORT
+    # =========================================================================
+    
+    async def process_webhook_update(self, update: Update) -> None:
+        """
+        Process a Telegram update received via webhook.
+        
+        Routes the update through appropriate handlers based on content type.
+        This method is called by the webhook endpoint to process updates.
+        
+        Args:
+            update: Telegram Update object parsed from webhook JSON
+        
+        Raises:
+            ValueError: If application is not initialized
+        """
+        if not self.application:
+            raise ValueError("TelegramChannel application not initialized. Call start() first.")
+        
+        # Create a minimal context object for handlers
+        # Handlers need context.bot for send_chat_action and get_file operations
+        class WebhookContext:
+            """Minimal context object for webhook updates."""
+            def __init__(self, bot):
+                self.bot = bot
+        
+        context = WebhookContext(self.application.bot)
+        
+        # Route update based on type
+        if update.message:
+            message = update.message
+            
+            # Check for commands first
+            if message.text and message.entities:
+                for entity in message.entities:
+                    if entity.type == "bot_command":
+                        command = message.text[entity.offset:entity.offset + entity.length].split("@")[0]
+                        
+                        # Route to command handler
+                        if command == "/start":
+                            await self._cmd_start(update, context)
+                        elif command == "/newchat":
+                            await self._cmd_newchat(update, context)
+                        elif command == "/help":
+                            await self._cmd_help(update, context)
+                        elif command == "/logs":
+                            await self._cmd_logs(update, context)
+                        return
+            
+            # Route to message handlers based on content type
+            if message.photo:
+                await self._handle_photo(update, context)
+            elif message.video:
+                await self._handle_video(update, context)
+            elif message.voice or message.audio:
+                await self._handle_voice(update, context)
+            elif message.document:
+                await self._handle_document(update, context)
+            elif message.text:
+                await self._handle_text(update, context)
+        
+        elif update.callback_query:
+            # Handle callback queries (for inline keyboards)
+            # TODO: Implement callback query handlers if needed
+            logger.debug(f"Received callback_query update: {update.callback_query.data}")
+        
+        else:
+            logger.debug(f"Unhandled update type: {update.update_id}")
 
 
 # =============================================================================
