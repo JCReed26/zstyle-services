@@ -36,6 +36,9 @@ services:
       - ./zstyle.db:/app/zstyle.db
       # Google OAuth credentials (optional)
       - ./client_secret.json:/app/client_secret.json:ro
+    depends_on:
+      openmemory:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -62,6 +65,31 @@ services:
     volumes:
       # Share database for user lookups
       - ./zstyle.db:/app/zstyle.db
+
+  # ---------------------------------------------------------------------------
+  # OpenMemory HTTP Server
+  # ---------------------------------------------------------------------------
+  openmemory:
+    image: node:18-alpine
+    container_name: zstyle_openmemory
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "
+      git clone https://github.com/CaviraOSS/OpenMemory.git . &&
+      npm install &&
+      npm start
+      "
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 # =============================================================================
 # NOTES:

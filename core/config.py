@@ -28,6 +28,8 @@ class Settings(BaseSettings):
         - TELEGRAM_WEBHOOK_SECRET: Telegram webhook secret (default: None)
         - TICKTICK_CLIENT_ID: TickTick OAuth client ID (default: None)
         - TICKTICK_CLIENT_SECRET: TickTick OAuth client secret (default: None)
+        - GOOGLE_CLIENT_ID: Google OAuth client ID (default: None)
+        - GOOGLE_CLIENT_SECRET: Google OAuth client secret (default: None)
     """
     
     # Required fields
@@ -45,6 +47,8 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_SECRET: Optional[str] = None
     TICKTICK_CLIENT_ID: Optional[str] = None
     TICKTICK_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
     
     model_config = SettingsConfigDict(
         env_file=".env",

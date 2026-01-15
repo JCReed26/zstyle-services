@@ -3,11 +3,10 @@ Message Router
 
 Bridges input channels to the ADK agent layer. Responsible for:
 1. Receiving NormalizedMessage from channels
-2. Loading user context from memory
-3. Converting to ADK-compatible format
-4. Running the agent
-5. Logging activity
-6. Returning response to channel
+2. Converting to ADK-compatible format
+3. Running the agent (memory handled by ADK Runner)
+4. Logging activity
+5. Returning response to channel
 
 FLOW:
 =====
@@ -25,7 +24,6 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from .base import NormalizedMessage, MessageType
-from services.memory import memory_service
 from services.activity_log import activity_log_service
 from core.database.models import ActivityLogSource
 
@@ -39,9 +37,8 @@ class MessageRouter:
     
     This is the bridge between the Communication Layer and Agent Layer.
     It handles:
-    - User context loading from memory
     - Message format conversion
-    - Agent invocation
+    - Agent invocation (memory handled by ADK Runner)
     - Activity logging
     
     Usage:
@@ -93,19 +90,17 @@ class MessageRouter:
             # 1. Log the incoming message
             await self._log_activity(message)
             
-            # 2. Get user context from memory
-            user_context = await memory_service.get_user_context(user_id)
-            
-            # 3. Get or create ADK session
+            # 2. Get or create ADK session
             session_id = await self._ensure_session(user_id)
             
-            # 4. Build ADK content with user context
-            adk_content = self._build_adk_content(message, user_context)
+            # 3. Build ADK content from message
+            # Note: Memory is handled automatically by ADK Runner via MemoryService
+            adk_content = self._build_adk_content(message)
             
-            # 5. Run the agent
+            # 4. Run the agent
             response_text = await self._run_agent(user_id, session_id, adk_content)
             
-            # 6. Log the response
+            # 5. Log the response
             await activity_log_service.log(
                 user_id=user_id,
                 source=ActivityLogSource.SYSTEM,
@@ -156,7 +151,7 @@ class MessageRouter:
         Get existing ADK session or create a new one.
         
         Note: ADK sessions are lightweight - we create fresh ones rather than
-        persisting long histories. User context comes from memory service.
+        persisting long histories. User memory is handled by ADK Runner via MemoryService.
         """
         if user_id in self._user_sessions:
             # Verify session still exists
@@ -181,14 +176,13 @@ class MessageRouter:
     
     def _build_adk_content(
         self,
-        message: NormalizedMessage,
-        user_context: Any
+        message: NormalizedMessage
     ) -> types.Content:
         """
-        Build ADK Content from normalized message and user context.
+        Build ADK Content from normalized message.
         
-        The user context is injected as a system-like prefix to give the
-        agent awareness of the user's state without bloating chat history.
+        Memory/context is handled automatically by ADK Runner via MemoryService,
+        so we just convert the message format here.
         """
         parts = []
         

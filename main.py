@@ -113,11 +113,18 @@ from google.adk.sessions import InMemorySessionService
 from channels.router import MessageRouter
 from channels.base import NormalizedMessage, MessageType
 from agents.exec_func_coach.agent import root_agent
+from services.openmemory_adk_service import OpenMemoryADKService
 
 # Initialize Bridge Components
 # We create a dedicated Runner for the bridge to handle external channel requests
 bridge_session_service = InMemorySessionService()
-bridge_runner = Runner(agent=root_agent, app_name="zstyle-bridge", session_service=bridge_session_service)
+memory_service = OpenMemoryADKService()
+bridge_runner = Runner(
+    agent=root_agent,
+    app_name="zstyle-bridge",
+    session_service=bridge_session_service,
+    memory_service=memory_service
+)
 message_router = MessageRouter(runner=bridge_runner, app_name="zstyle-bridge", session_service=bridge_session_service)
 
 class BridgeRequest(BaseModel):
