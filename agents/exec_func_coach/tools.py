@@ -20,7 +20,23 @@ ticktick_agent = Agent(
 ticktick_agent_tool = AgentTool(ticktick_agent)
 
 # Initialize TickTickTool instance
+# #region debug log
+try:
+    import json, time, os
+    log_path = '/tmp/debug.log'
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    with open(log_path, 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"tools.py:23","message":"Before TickTickTool instantiation","data":{},"timestamp":int(time.time()*1000)})+'\n')
+except: pass
+# #endregion
 ticktick_tool = TickTickTool()
+# #region debug log
+try:
+    import json, time
+    with open('/tmp/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"tools.py:24","message":"After TickTickTool instantiation","data":{},"timestamp":int(time.time()*1000)})+'\n')
+except: pass
+# #endregion
 
 # google tools (calendar, tasks, gmail) through built in google adk tools
 from google.adk.tools.google_api_tool import GoogleApiToolset

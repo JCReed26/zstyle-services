@@ -10,8 +10,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 import base64
+from typing import Optional
 
-from core.config import settings
+from core.config import get_settings
 
 
 def get_encryption_key() -> bytes:
@@ -21,6 +22,7 @@ def get_encryption_key() -> bytes:
     Uses PBKDF2HMAC to derive a Fernet-compatible key from the SECRET_KEY.
     This ensures consistent key generation from the same SECRET_KEY.
     """
+    settings = get_settings()
     # Use SECRET_KEY as password and a fixed salt (derived from SECRET_KEY)
     # In production, consider using a separate salt stored securely
     salt = hashlib.sha256(settings.SECRET_KEY.encode()).digest()[:16]
@@ -37,8 +39,16 @@ def get_encryption_key() -> bytes:
     return key
 
 
-# Initialize cipher with derived key
-_cipher = Fernet(get_encryption_key())
+# Initialize cipher with derived key (lazy-loaded)
+_cipher: Optional[Fernet] = None
+
+
+def _get_cipher() -> Fernet:
+    """Get or create the Fernet cipher instance."""
+    global _cipher
+    if _cipher is None:
+        _cipher = Fernet(get_encryption_key())
+    return _cipher
 
 
 def encrypt_credential(value: str) -> str:
@@ -51,7 +61,8 @@ def encrypt_credential(value: str) -> str:
     Returns:
         Encrypted value as base64-encoded string
     """
-    encrypted_bytes = _cipher.encrypt(value.encode())
+    cipher = _get_cipher()
+    encrypted_bytes = cipher.encrypt(value.encode())
     return encrypted_bytes.decode()
 
 
@@ -68,7 +79,8 @@ def decrypt_credential(encrypted: str) -> str:
     Raises:
         cryptography.fernet.InvalidToken: If decryption fails
     """
-    decrypted_bytes = _cipher.decrypt(encrypted.encode())
+    cipher = _get_cipher()
+    decrypted_bytes = cipher.decrypt(encrypted.encode())
     return decrypted_bytes.decode()
 
 

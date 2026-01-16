@@ -694,6 +694,12 @@ async def main():
     
     try:
         await channel.start()
+        # Start polling to receive messages from Telegram
+        logger.info("Starting Telegram polling...")
+        await channel.application.updater.start_polling(
+            allowed_updates=["message", "callback_query"],
+            drop_pending_updates=True
+        )
         logger.info("Telegram channel running. Press Ctrl+C to stop.")
         
         # Keep running

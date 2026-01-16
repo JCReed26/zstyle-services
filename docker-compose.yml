@@ -76,9 +76,13 @@ services:
     working_dir: /app
     command: >
       sh -c "
-      apk add --no-cache curl &&
-      git clone https://github.com/CaviraOSS/OpenMemory.git . &&
+      apk add --no-cache curl git &&
+      rm -rf /tmp/repo &&
+      git clone --depth 1 https://github.com/CaviraOSS/OpenMemory.git /tmp/repo &&
+      cp -a /tmp/repo/. /app/ &&
+      cd /app/packages/openmemory-js &&
       npm install &&
+      npm run build &&
       npm start
       "
     ports:

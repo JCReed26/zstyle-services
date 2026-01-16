@@ -7,7 +7,6 @@ Provides add_task and get_tasks functionality.
 import json
 from typing import Optional
 
-from google.adk.tools import tool
 from services.ticktick.ticktick_service import TickTickService
 from services.credential_service import CredentialNotFoundError
 
@@ -23,9 +22,22 @@ class TickTickTool:
     
     def __init__(self):
         """Initialize TickTickTool with TickTickService instance."""
+        # #region debug log
+        try:
+            import json, time
+            with open('/tmp/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"ticktick_tool.py:23","message":"TickTickTool.__init__ entry","data":{},"timestamp":int(time.time()*1000)})+'\n')
+        except: pass
+        # #endregion
         self.service = TickTickService()
+        # #region debug log
+        try:
+            import json, time
+            with open('/tmp/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"ticktick_tool.py:25","message":"TickTickTool.__init__ exit","data":{},"timestamp":int(time.time()*1000)})+'\n')
+        except: pass
+        # #endregion
     
-    @tool(name="add_ticktick_task")
     async def add_task(
         self,
         user_id: str,
@@ -61,7 +73,6 @@ class TickTickTool:
         except Exception as e:
             return f"Error: {str(e)}"
     
-    @tool(name="get_ticktick_tasks")
     async def get_tasks(self, user_id: str, list_name: str = "Inbox") -> str:
         """
         Get TickTick tasks, optionally filtered by list_name.

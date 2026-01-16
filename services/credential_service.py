@@ -27,6 +27,7 @@ creds = await credential_service.get_credentials(
 """
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from contextlib import asynccontextmanager
 
 from core.database.engine import AsyncSessionLocal
 from core.database.repositories import CredentialRepository
@@ -49,6 +50,26 @@ class CredentialService:
     
     # Sensitive keys that should be encrypted
     SENSITIVE_KEYS = {"token", "refresh_token", "api_key", "secret", "password"}
+    
+    def _get_session_context(self, session: Optional[AsyncSession] = None):
+        """
+        Get a database session context manager.
+        
+        Args:
+            session: Optional existing session to use. If None, creates a new session.
+            
+        Returns:
+            Context manager that yields an AsyncSession
+        """
+        if session is not None:
+            # Use provided session (don't close it) - create a no-op context manager
+            @asynccontextmanager
+            async def _noop_context():
+                yield session
+            return _noop_context()
+        else:
+            # Create new session
+            return AsyncSessionLocal()
     
     def _extract_sensitive_data(self, credentials: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -116,7 +137,8 @@ class CredentialService:
         self,
         user_id: str,
         service: str,
-        credentials: Dict[str, Any]
+        credentials: Dict[str, Any],
+        session: Optional[AsyncSession] = None
     ):
         """
         Store credentials for a user and service.
@@ -130,6 +152,7 @@ class CredentialService:
             credentials: Dictionary containing credential data.
                         Must include "token" key. May include "refresh_token"
                         and other metadata.
+            session: Optional database session to use. If None, creates a new session.
                         
         Returns:
             The created or updated Credential instance
@@ -140,7 +163,7 @@ class CredentialService:
         # Extract and encrypt sensitive data
         extracted = self._extract_sensitive_data(credentials)
         
-        async with AsyncSessionLocal() as db:
+        async with self._get_session_context(session) as db:
             repo = CredentialRepository(db)
             
             # Check if credential already exists
@@ -167,7 +190,8 @@ class CredentialService:
     async def get_credentials(
         self,
         user_id: str,
-        service: str
+        service: str,
+        session: Optional[AsyncSession] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Retrieve credentials for a user and service.
@@ -175,11 +199,12 @@ class CredentialService:
         Args:
             user_id: The user's ID
             service: Service name
+            session: Optional database session to use. If None, creates a new session.
             
         Returns:
             Dictionary with decrypted credentials, or None if not found
         """
-        async with AsyncSessionLocal() as db:
+        async with self._get_session_context(session) as db:
             repo = CredentialRepository(db)
             credential = await repo.get_by_user_and_type(user_id, service)
             
@@ -192,7 +217,8 @@ class CredentialService:
         self,
         user_id: str,
         service: str,
-        credentials: Dict[str, Any]
+        credentials: Dict[str, Any],
+        session: Optional[AsyncSession] = None
     ):
         """
         Update existing credentials for a user and service.
@@ -201,6 +227,7 @@ class CredentialService:
             user_id: The user's ID
             service: Service name
             credentials: Dictionary containing credential data
+            session: Optional database session to use. If None, creates a new session.
             
         Returns:
             The updated Credential instance
@@ -212,7 +239,7 @@ class CredentialService:
         # Extract and encrypt sensitive data
         extracted = self._extract_sensitive_data(credentials)
         
-        async with AsyncSessionLocal() as db:
+        async with self._get_session_context(session) as db:
             repo = CredentialRepository(db)
             
             try:
@@ -233,7 +260,8 @@ class CredentialService:
     async def delete_credentials(
         self,
         user_id: str,
-        service: str
+        service: str,
+        session: Optional[AsyncSession] = None
     ) -> None:
         """
         Delete credentials for a user and service.
@@ -241,11 +269,12 @@ class CredentialService:
         Args:
             user_id: The user's ID
             service: Service name
+            session: Optional database session to use. If None, creates a new session.
             
         Raises:
             CredentialNotFoundError: If credential not found
         """
-        async with AsyncSessionLocal() as db:
+        async with self._get_session_context(session) as db:
             repo = CredentialRepository(db)
             
             try:

@@ -65,5 +65,33 @@ class Settings(BaseSettings):
         return v
 
 
-# Create singleton instance
-settings = Settings()
+# Create singleton instance (lazy-loaded for testability)
+_settings_instance: Optional[Settings] = None
+
+
+def get_settings() -> Settings:
+    """
+    Get the singleton Settings instance.
+    
+    Lazy-loads the instance on first access to allow tests to set
+    environment variables before the singleton is created.
+    """
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = Settings()
+    return _settings_instance
+
+
+def reset_settings() -> None:
+    """
+    Reset the singleton Settings instance.
+    
+    This is useful for testing when you need to reload settings
+    with different environment variables.
+    """
+    global _settings_instance
+    _settings_instance = None
+
+
+# Create singleton instance for backward compatibility
+settings = get_settings()

@@ -24,18 +24,66 @@ class TickTickService:
     
     def __init__(self):
         """Initialize TickTickService with OAuth2 configuration."""
+        # #region debug log
+        try:
+            import json, time
+            with open('/tmp/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ticktick_service.py:25","message":"TickTickService.__init__ entry","data":{"has_client_id":bool(settings.TICKTICK_CLIENT_ID),"has_client_secret":bool(settings.TICKTICK_CLIENT_SECRET)},"timestamp":int(time.time()*1000)})+'\n')
+        except: pass
+        # #endregion
         self.client_id = settings.TICKTICK_CLIENT_ID
         self.client_secret = settings.TICKTICK_CLIENT_SECRET
         self.redirect_uri = "http://localhost:8080/redirect"  # Default redirect URI
-        
-        if self.client_id and self.client_secret:
-            self.oauth_client = OAuth2(
+        # Lazy initialization: Don't create OAuth2 client until actually needed
+        # This prevents interactive authentication prompts during service startup
+        self._oauth_client = None
+        # #region debug log
+        try:
+            import json, time
+            with open('/tmp/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ticktick_service.py:35","message":"TickTickService.__init__ exit - OAuth2 lazy","data":{},"timestamp":int(time.time()*1000)})+'\n')
+        except: pass
+        # #endregion
+    
+    def _get_oauth_client(self):
+        """
+        Get or create OAuth2 client only when needed for authentication.
+        This prevents interactive auth prompts during service startup.
+        OAuth2 is only created when authenticate_user() is called.
+        """
+        if self._oauth_client is None:
+            if not self.client_id or not self.client_secret:
+                return None
+            # #region debug log
+            try:
+                import json, time
+                with open('/tmp/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ticktick_service.py:48","message":"Creating OAuth2 client for authentication","data":{},"timestamp":int(time.time()*1000)})+'\n')
+            except: pass
+            # #endregion
+            # Create OAuth2 client - this may prompt, but only happens when user explicitly
+            # calls authenticate_user(), not during service initialization
+            self._oauth_client = OAuth2(
                 client_id=self.client_id,
                 client_secret=self.client_secret,
                 redirect_uri=self.redirect_uri
             )
-        else:
-            self.oauth_client = None
+            # #region debug log
+            try:
+                import json, time
+                with open('/tmp/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ticktick_service.py:58","message":"OAuth2 client created","data":{},"timestamp":int(time.time()*1000)})+'\n')
+            except: pass
+            # #endregion
+        return self._oauth_client
+    
+    @property
+    def oauth_client(self):
+        """
+        Property accessor for backward compatibility.
+        Returns None if OAuth2 hasn't been created yet (prevents startup prompts).
+        """
+        return self._oauth_client
     
     async def _get_client(self, user_id: str) -> TickTickClient:
         """
@@ -64,8 +112,10 @@ class TickTickService:
         access_token = credentials.get("token") or credentials.get("access_token")
         
         # If we have username/password, use them
+        # Pass None for oauth_client - TickTickClient works with username/password alone
+        # OAuth2 is only needed for the authentication flow, not for API calls with username/password
         if username and password:
-            return TickTickClient(username, password, self.oauth_client)
+            return TickTickClient(username, password, None)
         
         # If we only have tokens, we might need to refresh or re-authenticate
         # For now, raise error if we don't have username/password
@@ -76,7 +126,7 @@ class TickTickService:
                 "Username and password are required."
             )
         
-        return TickTickClient(username, password, self.oauth_client)
+        return TickTickClient(username, password, None)
     
     async def authenticate_user(self, user_id: str, code: str) -> dict:
         """
@@ -95,7 +145,9 @@ class TickTickService:
         if not code or not code.strip():
             raise ValueError("OAuth code is required")
         
-        if not self.oauth_client:
+        # Create OAuth2 client only when needed for authentication
+        oauth_client = self._get_oauth_client()
+        if not oauth_client:
             raise ValueError(
                 "TickTick OAuth not configured. "
                 "Please set TICKTICK_CLIENT_ID and TICKTICK_CLIENT_SECRET in environment."
@@ -104,7 +156,7 @@ class TickTickService:
         try:
             # Exchange code for tokens
             token_response = await asyncio.to_thread(
-                self.oauth_client.get_access_token,
+                oauth_client.get_access_token,
                 code
             )
             

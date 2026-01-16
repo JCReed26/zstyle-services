@@ -53,12 +53,40 @@ async def test_user(db_session):
 
 
 @pytest.fixture
-def credential_service():
-    """Create a CredentialService instance."""
+async def credential_service(db_session):
+    """Create a CredentialService instance with test database session."""
     # Import will fail until service is created - expected in TDD
     try:
         from services.credential_service import CredentialService
-        return CredentialService()
+        service = CredentialService()
+        # Store session for use in tests - create a wrapper that auto-passes session
+        original_store = service.store_credentials
+        original_get = service.get_credentials
+        original_update = service.update_credentials
+        original_delete = service.delete_credentials
+        
+        async def store_wrapper(*args, **kwargs):
+            kwargs['session'] = db_session
+            return await original_store(*args, **kwargs)
+        
+        async def get_wrapper(*args, **kwargs):
+            kwargs['session'] = db_session
+            return await original_get(*args, **kwargs)
+        
+        async def update_wrapper(*args, **kwargs):
+            kwargs['session'] = db_session
+            return await original_update(*args, **kwargs)
+        
+        async def delete_wrapper(*args, **kwargs):
+            kwargs['session'] = db_session
+            return await original_delete(*args, **kwargs)
+        
+        service.store_credentials = store_wrapper
+        service.get_credentials = get_wrapper
+        service.update_credentials = update_wrapper
+        service.delete_credentials = delete_wrapper
+        
+        return service
     except ImportError:
         pytest.skip("CredentialService not yet implemented")
 
