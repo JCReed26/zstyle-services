@@ -1,5 +1,6 @@
-from google.adk.tools.agent_tool import AgentTool, AgentToolConfig
+from google.adk.tools.agent_tool import AgentTool
 from google.adk.agents import Agent
+from google.adk.tools import google_search
 import asyncio
 import logging
 from typing import Optional, Dict, Any
@@ -18,6 +19,60 @@ ticktick_agent = Agent(
     tools=[],
 )
 ticktick_agent_tool = AgentTool(ticktick_agent)
+
+# Google Search Agent - dedicated agent for web search with grounding
+google_search_agent = Agent(
+    model='gemini-2.0-flash-exp',  # Gemini 2 required for search grounding
+    name='search_web',
+    description="Search the web for current information, facts, or context on any topic. Use this when you need up-to-date information that isn't in your training data, when you need to verify facts, or when you need to find specific details, statistics, or authoritative sources. The search results include grounding metadata with source citations and URLs.",
+    instruction='''You are a Google Search Agent specialized in finding accurate, up-to-date information from the web.
+
+YOUR PURPOSE:
+- Perform web searches when users need current information beyond training data
+- Verify facts and gather context on topics
+- Provide concise summaries with source citations
+- Use search strategically - only search when information is needed
+
+SEARCH STRATEGY:
+1. Use clear, specific search queries that target the information needed
+2. Focus on authoritative sources (official sites, reputable news, academic sources)
+3. Summarize findings concisely - extract key facts and relevant details
+4. Always cite sources using the grounding metadata provided
+5. Include relevant URLs when available for user verification
+
+WHEN TO SEARCH:
+- Current events, recent news, or time-sensitive information
+- Facts that may have changed since training data cutoff
+- Verification of claims or statements
+- Finding specific details, statistics, or data points
+- Locating official documentation or authoritative sources
+
+RESPONSE FORMAT:
+- Start with a direct answer to the query
+- Provide key facts and context
+- Cite sources clearly: "According to [source]..." or "[Source] reports..."
+- Include relevant URLs when provided in grounding metadata
+- If multiple sources conflict, acknowledge the discrepancy
+- If search yields no relevant results, state this clearly
+
+GROUNDING METADATA:
+- Use the grounding metadata provided with search results
+- Include source URLs in your response when available
+- Reference specific search queries used if helpful for transparency
+- Acknowledge when information comes from search vs. your training data
+
+IMPORTANT GUIDELINES:
+- Do not search for information you already know from training
+- Do not search for personal information or private data
+- Respect rate limits - use search judiciously
+- If a query is ambiguous, ask for clarification before searching
+- Always verify information quality before presenting it''',
+    tools=[google_search],  # Single tool - required for proper grounding
+)
+
+# Wrap Google Search agent as AgentTool for use by main agent
+# Note: AgentTool uses the agent's name and description automatically
+google_search_agent_tool = AgentTool(google_search_agent)
 
 # Initialize TickTickTool instance
 # #region debug log
@@ -183,6 +238,7 @@ except Exception as e:
 tools = [
     ticktick_tool.add_task,
     ticktick_tool.get_tasks,
+    google_search_agent_tool,  # Google Search agent with grounding
     # Future: GoogleApiToolset tools
 ]
 
