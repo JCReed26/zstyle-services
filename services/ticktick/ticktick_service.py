@@ -13,7 +13,7 @@ from ticktick.api import TickTickClient
 
 from services import credential_service
 from services.credential_service import CredentialNotFoundError
-from core.config import settings
+from app.config import settings
 
 
 class TickTickService:

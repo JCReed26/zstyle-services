@@ -2,35 +2,20 @@
 
 Executive Function Coach - AI-powered personal productivity assistant
 
-## Architecture
+## What is ZStyle Services
 
-app - hosts ADK fast api app
+ZStyle Services is an AI-powered Executive Function Coach system built on Google's Agent Development Kit (ADK). It provides a personal productivity assistant that helps users manage goals, tasks, schedules, and build systems that work for their individual needs.
 
-telegram_bot - hosts telegram bot with polling
+## Quick Start
 
-## Components
+### Prerequisites
 
-### Agent
+- Python 3.10+
+- Supabase project (for database and authentication)
+- Google API key (for Gemini models)
+- Telegram bot token (for Telegram integration)
 
-- `/agents/exec_func_coach/` - Executive Function Coach agent
-- Acts as friend and guide to creating a life that moves the day to day forward
-- Helps create set and reach goals and Design systems to improve the experience of life
-- Uses Google ADK framework
-- Integrates with Google Calendar, TickTick, and more for life management
-
-### Services
-
-- `/services/memory/` - Long-term memory storage & RAG (No sessions just users and memory)
-- `/services/artifacts/` - File and document storage
-- `/services/activity_log.py` - Session management
-
-### MCP (Model Context Protocol)
-
-- none implemented yet to come soon
-- idea 1: telegram mcp but for group chats with a2a agents working together
-- idea 2: twilio mcp server for agent to call users as reminder
-
-## Setup
+### Initial Setup
 
 1. Copy `.env.example` to `.env` and configure:
 
@@ -38,15 +23,149 @@ telegram_bot - hosts telegram bot with polling
    cp .env.example .env
    ```
 
-2. Run with Docker:
+2. Configure environment variables in `.env`:
+   - `GOOGLE_API_KEY` - Google API key for Gemini models
+   - `TELEGRAM_BOT_TOKEN` - Telegram bot token
+   - `SECRET_KEY` - Secret key for encryption (32+ characters)
+   - `DATABASE_URL` - PostgreSQL connection string (Supabase)
+   - `SUPABASE_URL` - Supabase project URL
+   - `SUPABASE_ANON_KEY` - Supabase anonymous key
+   - `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+
+3. Initialize Supabase database:
+   - Create tables using Supabase Dashboard SQL Editor or migrations
+   - Configure Row Level Security (RLS) policies
+   - Set up authentication providers
+
+4. Install dependencies:
 
    ```bash
-   bash ddup.sh
+   make install
    ```
+
+5. Start development server:
+
+   ```bash
+   make dev
+   ```
+
+   Or run with Docker:
+
+   ```bash
+   make docker-up
+   ```
+
+## Architecture Overview
+
+```
+zstyle-services/
+├── app/                    # Application core
+│   ├── config.py          # Configuration
+│   ├── logger.py          # Logging
+│   ├── security.py        # Security utilities
+│   └── main.py            # Entry point
+├── agent/                 # AI agents
+│   └── exec_func_coach/   # Executive Function Coach agent
+├── api/                   # API routes
+│   ├── api/              # API endpoints
+│   ├── auth/              # Authentication endpoints
+│   ├── oauth/             # OAuth endpoints
+│   └── telegram_webhook.py
+├── channels/              # Communication channels
+│   ├── base.py           # Base channel classes
+│   ├── router.py         # Message routing
+│   └── telegram_bot/     # Telegram channel implementation
+├── database/             # Database layer
+│   ├── engine.py         # Database engine
+│   ├── models.py         # SQLAlchemy models
+│   └── repositories.py   # Repository pattern
+├── services/             # Business logic
+│   ├── activity_log.py
+│   ├── auth_service.py
+│   ├── credential_service.py
+│   └── ...
+└── tools/                # Agent tools
+    └── ticktick_tool.py
+```
+
+### Components
+
+#### Agent
+
+- `/agent/exec_func_coach/` - Executive Function Coach agent
+- Acts as friend and guide to creating a life that moves the day to day forward
+- Helps create, set and reach goals and design systems to improve the experience of life
+- Uses Google ADK framework
+- Integrates with Google Calendar, TickTick, and more for life management
+
+#### Services
+
+- `/services/memory/` - Long-term memory storage & RAG (No sessions just users and memory)
+- `/services/activity_log.py` - Activity logging service
+- `/services/auth_service.py` - Authentication service (Supabase Auth)
+- `/services/credential_service.py` - Secure credential storage
+
+#### API
+
+- `/api/api/` - REST API endpoints
+- `/api/auth/` - Authentication endpoints (phone auth)
+- `/api/oauth/` - OAuth endpoints (Google, TickTick)
+- `/api/telegram_webhook.py` - Telegram webhook handler
 
 ## Development
 
-- SQLite Database for initial development (move to supabase for prod)
+### Running the Application
+
+```bash
+# Development server with hot reload
+make dev
+
+# Or using Docker
+make docker-up
+```
+
+### Testing
+
+```bash
+# Run all tests
+make test
+
+# Run unit tests only
+make test-unit
+
+# Run integration tests only
+make test-integration
+```
+
+### Code Quality
+
+```bash
+# Run linters
+make lint
+
+# Format code
+make format
+```
+
+## Testing
+
+Tests are organized into:
+- `tests/unit/` - Unit tests (fast, isolated)
+- `tests/integration/` - Integration tests (may use external services)
+- `tests/api/` - API endpoint tests
+
+Run tests with:
+
+```bash
+make test
+```
+
+For integration tests against Supabase:
+
+```bash
+export TEST_DATABASE_URL="postgresql+asyncpg://postgres:password@db.xxx.supabase.co:5432/postgres"
+make test-integration
+```
 
 ## Next Steps
 

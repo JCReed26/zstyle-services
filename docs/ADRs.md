@@ -4,46 +4,50 @@ This document records architectural decisions made for the ZStyle Services proje
 
 ---
 
-## ADR-001: Database Selection and Migration Strategy
+## ADR-001: Database Selection
 
-**Status**: Proposed
+**Status**: Accepted
 
 **Date**: [Current Date]
 
 **Context**:
-The system needs persistent storage for users, credentials, activity logs, and memories. Currently using SQLite for development with plans to move to PostgreSQL for production.
+The system needs persistent storage for users, credentials, activity logs, and OAuth states. Requires production-ready database from day one with support for concurrent access and scalability.
 
 **Decision**:
-- Use SQLite for local development (simple setup, no server required)
-- Use PostgreSQL for production (scalability, concurrent access)
+- Use PostgreSQL (Supabase) for all environments
 - Use SQLAlchemy async for database abstraction
-- Use Alembic for database migrations
 - Environment-based configuration (DATABASE_URL environment variable)
+- Leverage Supabase Auth for authentication
+- Use Row Level Security (RLS) for data isolation
 
 **Consequences**:
 
 **Positive**:
-- SQLite enables fast local development
-- PostgreSQL provides production scalability
+- Production-ready from day one
+- Supports concurrent access
+- Scalable architecture
+- Built-in authentication via Supabase Auth
+- Row Level Security (RLS) support
+- Managed service reduces operational overhead
 - SQLAlchemy provides database-agnostic queries
-- Alembic enables version-controlled schema changes
 - Environment-based config follows 12-factor principles
 
 **Negative**:
-- Requires maintaining compatibility between SQLite and PostgreSQL
-- Some PostgreSQL-specific features unavailable in SQLite
-- Migration complexity for schema changes
-- Additional infrastructure for PostgreSQL in production
+- Requires Supabase project setup
+- Additional infrastructure dependency
+- Network dependency for database access
 
 **Alternatives Considered**:
+- SQLite for development: Rejected - requires maintaining compatibility, insufficient for production
 - MongoDB: Rejected - relational data model better fits use case
 - DynamoDB: Rejected - team familiarity with SQL, cost considerations
-- Single database for all environments: Rejected - SQLite insufficient for production
+- Self-hosted PostgreSQL: Rejected - managed service reduces operational overhead
 
 **Implementation Notes**:
-- Database URL automatically switches based on environment
-- Connection pooling configured for PostgreSQL
-- Migrations tested on both databases
+- Database URL configured via DATABASE_URL environment variable
+- Connection pooling configured for performance
+- Supabase provides managed PostgreSQL with authentication
+- Schema managed through Supabase Dashboard or migrations
 
 ---
 

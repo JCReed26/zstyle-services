@@ -26,7 +26,9 @@ google-auth-oauthlib
 sqlalchemy
 asyncpg
 psycopg2-binary
-alembic
+
+# Supabase
+supabase>=2.0.0
 
 # Authentication and security
 cryptography

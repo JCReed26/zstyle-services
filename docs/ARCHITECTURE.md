@@ -103,7 +103,7 @@ class NormalizedMessage:
 - Webhook and polling modes
 - User ID mapping (Telegram ID → Internal User ID)
 
-**API Bridge** (`main.py` - `/api/chat`)
+**API Bridge** (`app/main.py` - `/api/chat`)
 - HTTP endpoint for external integrations
 - Accepts `BridgeRequest` (JSON-safe NormalizedMessage)
 - Base64-encoded attachments
@@ -250,48 +250,49 @@ Semantic search in OpenMemory
 Formatted results returned to agent
 ```
 
-### 5. Database Layer (`core/database/`)
+### 5. Database Layer (`database/`)
 
-**Purpose**: Persistent storage for users, credentials, activity logs, and memories.
+**Purpose**: Persistent storage for users, credentials, activity logs, and OAuth states.
 
 #### Database Models
 
-**User** (`core/database/models/user.py`)
+**User** (`database/models.py`)
 - Core user identity
 - Maps channel IDs (Telegram, Discord) to internal user IDs
 - User profile information
+- Links to Supabase Auth users
 
-**Credential** (`core/database/models/credential.py`)
+**Credential** (`database/models.py`)
 - Encrypted OAuth tokens and API keys
 - Supports refresh tokens
 - Expiration tracking
 - **SECURITY**: Never indexed by RAG/memory systems
 
-**ActivityLog** (`core/database/models/activity_log.py`)
+**ActivityLog** (`database/models.py`)
 - Timestamped user activity tracking
 - Source tracking (Telegram, API, System, etc.)
 - Structured extra_data for filtering
 
-**UserMemory** (`core/database/models/memory.py`)
-- DEV FILL IN: [Purpose and usage]
-- May be redundant with OpenMemory - needs clarification
+**OAuthState** (`database/models.py`)
+- OAuth state tokens for CSRF protection
+- Expiration tracking
 
 #### Database Engine
 
 **Current Setup**:
-- Development: SQLite (`sqlite+aiosqlite:///zstyle.db`)
-- Production: PostgreSQL (commented out, needs environment variable)
+- Production: PostgreSQL (Supabase) - required
+- Uses `DATABASE_URL` environment variable
 
 **Why SQLAlchemy Async?**
 - Async/await support for FastAPI
 - Type-safe queries
-- Migration support (Alembic)
 - Database-agnostic queries
+- Connection pooling for performance
 
-**Issues**:
-- ⚠️ Production config is commented out (see NECESSARY-FIXES.md)
-- ⚠️ No migrations directory (Alembic initialized but not used)
-- ⚠️ Duplicate `database/` directory exists (legacy code)
+**Repository Pattern**:
+- All database operations go through repositories (`database/repositories.py`)
+- Provides abstraction layer for database access
+- Consistent error handling
 
 ### 6. Services Layer (`services/`)
 
@@ -335,21 +336,24 @@ Formatted results returned to agent
 - ⚠️ Not implemented (placeholder returns False)
 - ⚠️ Security risk for webhook endpoints
 
-### 8. API Layer (`interface/`)
+### 8. API Layer (`api/`)
 
 **Purpose**: HTTP endpoints and OAuth flows.
 
 #### Routes
 
-**API Routes** (`interface/api/routes.py`)
+**API Routes** (`api/api/routes.py`)
 - `/api/health` - Health check
 - `/api/user/state` - User state retrieval
 
-**OAuth Routes** (`interface/oauth/`)
+**OAuth Routes** (`api/oauth/`)
 - Google OAuth flow
 - TickTick OAuth flow
 
-**Webhook Routes** (`interface/telegram_webhook.py`)
+**Authentication Routes** (`api/auth/`)
+- Phone authentication (OTP via Supabase Auth)
+
+**Webhook Routes** (`api/telegram_webhook.py`)
 - `/webhook/telegram` - Telegram webhook endpoint
 - Processes Telegram updates
 - Routes to TelegramChannel
@@ -430,7 +434,6 @@ Formatted results returned to agent
 3. **openmemory**: OpenMemory HTTP server (port 8080)
 
 **Current Issues**:
-- ⚠️ SQLite file shared between containers (locking issues)
 - ⚠️ No production docker-compose override
 - ⚠️ No nginx/SSL termination
 
@@ -440,9 +443,12 @@ Formatted results returned to agent
 - `GOOGLE_API_KEY`: Gemini API key
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token
 - `SECRET_KEY`: Encryption key (32+ chars)
+- `DATABASE_URL`: PostgreSQL connection string (Supabase)
+- `SUPABASE_URL`: Supabase project URL
+- `SUPABASE_ANON_KEY`: Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key
 
 **Optional Variables**:
-- `DATABASE_URL`: PostgreSQL connection string
 - `OPENMEMORY_URL`: OpenMemory service URL
 - `OPENMEMORY_API_KEY`: OpenMemory API key
 - OAuth client IDs/secrets
@@ -456,19 +462,13 @@ Formatted results returned to agent
    - Cannot scale horizontally
    - No session persistence
 
-2. **SQLite Database**
-   - Single-file database
-   - No concurrent writes
-   - Not suitable for production
-
-3. **In-Memory Conversation Contexts**
+2. **In-Memory Conversation Contexts**
    - Lost on restart
    - No sharing between instances
 
 ### Scaling Strategy
 
 **Short-term**:
-- Replace SQLite with PostgreSQL
 - Use Redis for session storage
 - Use Redis for conversation contexts
 
@@ -495,8 +495,7 @@ Formatted results returned to agent
 ### Infrastructure
 - **Docker**: Containerization
 - **Docker Compose**: Local development
-- **SQLite**: Development database
-- **PostgreSQL**: Production database (planned)
+- **PostgreSQL**: Production database (Supabase)
 
 ## Design Decisions
 
@@ -528,15 +527,17 @@ Formatted results returned to agent
 - DEV FILL IN: [Initial reasoning - likely simplicity]
 - **Issue**: Doesn't scale, needs replacement
 
-### Why SQLite for Development?
+### Why PostgreSQL Only?
 
-**Decision**: Use SQLite for local development.
+**Decision**: Use PostgreSQL (Supabase) for all environments.
 
 **Rationale**:
-- Simple setup (no database server needed)
-- Easy to reset during development
-- Fast for small datasets
-- **Issue**: Production config commented out
+- Production-ready from day one
+- Supports concurrent access
+- Scalable architecture
+- Built-in authentication via Supabase Auth
+- Row Level Security (RLS) support
+- Managed service reduces operational overhead
 
 ## Future Architecture Considerations
 

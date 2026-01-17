@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from typing import Dict, Any
 
-from core.database.engine import Base
-from core.database.models import User, Credential
+from database.engine import Base
+from database.models import User, Credential
 from services.credential_service import CredentialNotFoundError
 
 

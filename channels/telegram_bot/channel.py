@@ -33,7 +33,7 @@ from datetime import datetime
 import uuid
 import httpx
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -48,8 +48,8 @@ from channels.base import (
     NormalizedMessage,
     MessageType,
 )
-from core.database.engine import AsyncSessionLocal
-from core.database.repositories import UserRepository
+from database.engine import AsyncSessionLocal
+from database.repositories import UserRepository
 
 
 logger = logging.getLogger(__name__)
@@ -175,6 +175,7 @@ class TelegramChannel(ConversationalChannel):
         self.application.add_handler(CommandHandler('newchat', self._cmd_newchat))
         self.application.add_handler(CommandHandler('help', self._cmd_help))
         self.application.add_handler(CommandHandler('logs', self._cmd_logs))
+        self.application.add_handler(CommandHandler('authorize', self._cmd_authorize))
         
         # Message handlers (order matters - more specific first)
         self.application.add_handler(
@@ -202,10 +203,10 @@ class TelegramChannel(ConversationalChannel):
         Handle /start command.
         Welcomes user and resets conversation context.
         """
-        telegram_id = update.effective_user.id
+        telegram_id, username, phone_number = self._extract_telegram_user_info(update)
         
         # Clear conversation context
-        user_id = await self._get_or_create_user(telegram_id, update.effective_user.username)
+        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
         self.clear_context(user_id)
         
         welcome = (
@@ -228,8 +229,8 @@ class TelegramChannel(ConversationalChannel):
         Handle /newchat command.
         Clears conversation context for a fresh start.
         """
-        telegram_id = update.effective_user.id
-        user_id = await self._get_or_create_user(telegram_id)
+        telegram_id, username, phone_number = self._extract_telegram_user_info(update)
+        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
         
         # Clear both channel context and router session
         self.clear_context(user_id)
@@ -268,8 +269,8 @@ class TelegramChannel(ConversationalChannel):
         """
         from services.activity_log import activity_log_service
         
-        telegram_id = update.effective_user.id
-        user_id = await self._get_or_create_user(telegram_id)
+        telegram_id, username, phone_number = self._extract_telegram_user_info(update)
+        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
         
         logs = await activity_log_service.get_recent(user_id, limit=25)
         
@@ -286,7 +287,56 @@ class TelegramChannel(ConversationalChannel):
         await update.message.reply_text(f"**Recent Activity:**\n\n```\n{formatted}\n```", parse_mode="Markdown")
     
     async def _cmd_authorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        pass
+        """
+        Handle /authorize command.
+        Shows Web App button for OAuth authorization.
+        """
+        telegram_id, username, phone_number = self._extract_telegram_user_info(update)
+        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
+        
+        # Get base URL from environment or use localhost for development
+        import os
+        from app.config import settings
+        
+        base_url = os.getenv("OAUTH_BASE_URL", f"http://localhost:{settings.PORT}")
+        base_url = base_url.rstrip('/')
+        
+        # Create Web App buttons for available services
+        buttons = []
+        
+        # Google OAuth button
+        if settings.GOOGLE_CLIENT_ID:
+            google_url = f"{base_url}/oauth/webapp?service=google&user_id={user_id}"
+            buttons.append([
+                InlineKeyboardButton(
+                    "🔍 Authorize Google",
+                    web_app=WebAppInfo(url=google_url)
+                )
+            ])
+        
+        # TickTick OAuth button
+        if settings.TICKTICK_CLIENT_ID:
+            ticktick_url = f"{base_url}/oauth/webapp?service=ticktick&user_id={user_id}"
+            buttons.append([
+                InlineKeyboardButton(
+                    "✓ Authorize TickTick",
+                    web_app=WebAppInfo(url=ticktick_url)
+                )
+            ])
+        
+        if not buttons:
+            await update.message.reply_text(
+                "No OAuth services are configured. Please contact the administrator."
+            )
+            return
+        
+        keyboard = InlineKeyboardMarkup(buttons)
+        
+        await update.message.reply_text(
+            "Click a button below to authorize a service:\n\n"
+            "This will open a secure authorization page where you can grant access to your accounts.",
+            reply_markup=keyboard
+        )
 
     # =========================================================================
     # MESSAGE HANDLERS
@@ -299,11 +349,11 @@ class TelegramChannel(ConversationalChannel):
         if not update.effective_message or not update.effective_message.text:
             return
         
-        telegram_id = update.effective_user.id
+        telegram_id, username, phone_number = self._extract_telegram_user_info(update)
         chat_id = update.effective_chat.id
         
         # Get or create user
-        user_id = await self._get_or_create_user(telegram_id, update.effective_user.username)
+        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
         
         # Get conversation context (handles keep-alive)
         conv_ctx = await self.get_or_create_context(user_id)
@@ -521,40 +571,112 @@ class TelegramChannel(ConversationalChannel):
     # USER MANAGEMENT
     # =========================================================================
     
+    def _extract_telegram_user_info(self, update: Update) -> tuple[int, Optional[str], Optional[str]]:
+        """
+        Extract user information from Telegram update.
+        
+        Returns:
+            Tuple of (telegram_id, username, phone_number)
+        """
+        telegram_user = update.effective_user
+        telegram_id = telegram_user.id
+        username = telegram_user.username
+        phone_number = getattr(telegram_user, 'phone_number', None)
+        return telegram_id, username, phone_number
+    
     async def _get_or_create_user(
         self,
         telegram_id: int,
-        username: Optional[str] = None
+        username: Optional[str] = None,
+        phone_number: Optional[str] = None
     ) -> str:
         """
         Get or create internal user ID for a Telegram user.
         
-        Maps Telegram user IDs to internal ZStyle user IDs.
-        Creates a new user record if this is a first-time user.
+        Uses Supabase Auth for user identification. Users must authenticate via
+        phone + OTP first. This method links Telegram ID to existing authenticated users.
+        
+        Args:
+            telegram_id: Telegram user ID
+            username: Optional Telegram username
+            phone_number: Optional phone number from Telegram user (E.164 format)
+                        (used for linking, but user must authenticate via OTP first)
+        
+        Returns:
+            User ID (UUID string from auth.users.id)
+        
+        Raises:
+            ValueError: If user not found and needs to authenticate
         """
         # Check cache first
         if telegram_id in self._user_id_cache:
-            return self._user_id_cache[telegram_id]
+            return str(self._user_id_cache[telegram_id])
         
         async with AsyncSessionLocal() as db:
             repo = UserRepository(db)
             
-            # Check database
+            # Check if user exists by Telegram ID
             user = await repo.get_by_telegram_id(telegram_id)
             
             if user:
+                # User exists - update username if needed
+                if username and user.username != username:
+                    user = await repo.update(user.id, username=username)
                 self._user_id_cache[telegram_id] = user.id
-                return user.id
+                return str(user.id)
             
-            # Create new user
-            user = await repo.create(
-                telegram_id=telegram_id,
-                username=username
+            # User doesn't exist - they need to authenticate via phone OTP first
+            # We cannot create users without Supabase Auth authentication
+            logger.warning(
+                f"User with Telegram ID {telegram_id} not found. "
+                "User must authenticate via phone OTP first. "
+                "Returning temporary ID - user should authenticate via /auth command."
             )
             
-            self._user_id_cache[telegram_id] = user.id
-            logger.info(f"Created new user {user.id} for Telegram ID {telegram_id}")
-            return user.id
+            # Return a temporary identifier
+            # This allows the system to continue, but user should authenticate
+            # The temporary ID will be replaced after phone auth completes
+            import uuid
+            temp_id = str(uuid.uuid4())
+            self._user_id_cache[telegram_id] = temp_id
+            
+            # TODO: Prompt user to authenticate via /auth command
+            # For now, return temp ID to prevent system crash
+            
+            return temp_id
+    
+    async def link_telegram_to_user(
+        self,
+        user_id: str,
+        telegram_id: int,
+        username: Optional[str] = None
+    ) -> None:
+        """
+        Link Telegram ID to an authenticated user.
+        
+        This is called after a user authenticates via phone OTP.
+        
+        Args:
+            user_id: UUID from auth.users.id (string)
+            telegram_id: Telegram user ID
+            username: Optional Telegram username
+        """
+        from services.auth_service import auth_service
+        
+        try:
+            await auth_service.link_telegram_id(
+                user_id=user_id,
+                telegram_id=telegram_id,
+                telegram_username=username
+            )
+            
+            # Update cache
+            self._user_id_cache[telegram_id] = user_id
+            logger.info(f"Linked Telegram ID {telegram_id} to user {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to link Telegram ID: {e}", exc_info=True)
+            raise
     
     # =========================================================================
     # WEBHOOK SUPPORT

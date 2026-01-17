@@ -11,7 +11,7 @@ from pydantic import ValidationError
 # Import will fail until we implement core.config
 # This is expected in TDD - tests first, then implementation
 try:
-    from core.config import Settings, reset_settings
+    from app.config import Settings, reset_settings
 except ImportError:
     Settings = None
     reset_settings = None

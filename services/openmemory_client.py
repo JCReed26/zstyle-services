@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Optional, Any
 import httpx
 
-from core.config import settings
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 

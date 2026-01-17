@@ -7,9 +7,9 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from core.database.engine import Base
-from core.database.repositories import UserRepository
-from core.database.models import User
+from database.engine import Base
+from database.repositories import UserRepository
+from database.models import User
 
 
 # Test database setup

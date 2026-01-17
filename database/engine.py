@@ -2,49 +2,87 @@
 ZStyle Database Engine Configuration
 
 This module provides the SQLAlchemy async engine setup for the ZStyle system.
-By default, it uses SQLite for development. Uncomment the Supabase section
-for production deployment.
+Requires PostgreSQL connection (Supabase). SQLite is not supported.
 
 Usage:
     from database.engine import engine, AsyncSessionLocal, Base, get_db_session
-
-To reset the database during development:
-    python reset_db.py
 """
 import os
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 # =============================================================================
 # DATABASE CONFIGURATION
 # =============================================================================
 
-# === PRODUCTION: Uncomment for Supabase/PostgreSQL ===
-# DATABASE_URL = os.getenv("DATABASE_URL")
-# if not DATABASE_URL:
-#     raise ValueError("DATABASE_URL environment variable is required for production")
-# # Fix for SQLAlchemy Async: 'postgresql://' -> 'postgresql+asyncpg://'
-# if DATABASE_URL.startswith("postgresql://"):
-#     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+# Get DATABASE_URL from environment - REQUIRED
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# === DEVELOPMENT: SQLite (default) ===
-# Simple file-based database, easy to reset during development
-DATABASE_URL = "sqlite+aiosqlite:///zstyle.db"
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL environment variable is required. "
+        "Set it to a PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/db). "
+        "SQLite is not supported."
+    )
+
+# Convert postgresql:// to postgresql+asyncpg:// for async support
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Validate that we're using PostgreSQL (not SQLite)
+if not DATABASE_URL.startswith("postgresql"):
+    raise ValueError(
+        f"Invalid DATABASE_URL: {DATABASE_URL}. "
+        "Only PostgreSQL is supported. SQLite is not supported."
+    )
+
+# Validate PostgreSQL connection format
+try:
+    from urllib.parse import urlparse
+    parsed = urlparse(DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"))
+    if not parsed.hostname:
+        raise ValueError("DATABASE_URL must include a hostname")
+except Exception as e:
+    raise ValueError(f"Invalid DATABASE_URL format: {e}") from e
+
+logger.info(f"Database configured: PostgreSQL at {parsed.hostname}")
 
 # =============================================================================
 # ENGINE & SESSION SETUP
 # =============================================================================
 
+# Connection pool configuration for PostgreSQL
+pool_config = {
+    "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+    "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+    "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "30")),
+    "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "3600")),  # 1 hour
+    "pool_pre_ping": True,  # Verify connections before use
+}
+
 # Create async engine
-# pool_pre_ping=True helps recover from lost connections (useful for Postgres)
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,  # Set to True to see SQL queries in console
-    pool_pre_ping=True
-)
+# echo=True in development for SQL query visibility
+echo_queries = os.getenv("ENV") == "development" and os.getenv("DB_ECHO", "false").lower() == "true"
+
+try:
+    engine = create_async_engine(
+        DATABASE_URL,
+        echo=echo_queries,
+        **pool_config
+    )
+    logger.info("Database engine created successfully")
+except Exception as e:
+    logger.error(f"Failed to create database engine: {e}")
+    raise ValueError(
+        f"Failed to connect to PostgreSQL database: {e}. "
+        "Check your DATABASE_URL and ensure the database is accessible."
+    ) from e
 
 # Create async session factory
 AsyncSessionLocal = sessionmaker(

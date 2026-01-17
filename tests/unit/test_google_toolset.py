@@ -38,7 +38,7 @@ def mock_credential_service():
 def mock_settings():
     """Mock settings for testing - autouse so it applies before imports."""
     # Patch settings before any imports that use it
-    with patch('core.config.settings') as mock_settings_obj:
+    with patch('app.config.settings') as mock_settings_obj:
         # Create a mock that has the required attributes
         mock_settings_obj.GOOGLE_CLIENT_ID = "test_client_id"
         mock_settings_obj.GOOGLE_CLIENT_SECRET = "test_client_secret"

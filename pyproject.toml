@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (may use external services)",
+    "e2e: End-to-end tests (full system tests)",
+    "slow: Slow running tests",
+]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]

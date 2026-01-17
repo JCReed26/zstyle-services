@@ -41,7 +41,7 @@ def test_client():
 @pytest.fixture
 def mock_credential_service():
     """Mock credential_service for testing."""
-    with patch('interface.oauth.google.credential_service') as mock, \
+    with patch('api.oauth.google.credential_service') as mock, \
          patch('interface.oauth.ticktick.credential_service') as mock2:
         # Both modules use credential_service, so patch both
         mock.store_credentials = AsyncMock()
@@ -52,7 +52,7 @@ def mock_credential_service():
 @pytest.fixture
 def mock_google_oauth_flow():
     """Mock Google OAuth flow."""
-    with patch('interface.oauth.google.Flow') as mock_flow_class:
+    with patch('api.oauth.google.Flow') as mock_flow_class:
         mock_credentials = MagicMock()
         mock_credentials.token = "test_access_token"
         mock_credentials.refresh_token = "test_refresh_token"
@@ -70,7 +70,7 @@ def mock_google_oauth_flow():
 @pytest.fixture
 def mock_ticktick_oauth():
     """Mock TickTick OAuth2 client."""
-    with patch('interface.oauth.ticktick.OAuth2') as mock_oauth_class:
+    with patch('api.oauth.ticktick.OAuth2') as mock_oauth_class:
         mock_oauth_instance = MagicMock()
         # Mock get_authorization_url to return URL without state (our code will append it)
         # Or accept state parameter if provided
@@ -120,7 +120,7 @@ async def test_google_oauth_initiate_missing_user_id(test_client):
 @pytest.mark.asyncio
 async def test_google_oauth_initiate_missing_config(test_client, mock_credential_service):
     """Test that missing client credentials returns 500."""
-    with patch('interface.oauth.google.settings') as mock_settings:
+    with patch('api.oauth.google.settings') as mock_settings:
         mock_settings.GOOGLE_CLIENT_ID = None
         mock_settings.GOOGLE_CLIENT_SECRET = None
         
@@ -138,7 +138,7 @@ async def test_google_oauth_callback_success(test_client, mock_credential_servic
     state = initiate_response.json()["state"]
     
     # Mock the token exchange
-    with patch('interface.oauth.google.Flow') as mock_flow_class:
+    with patch('api.oauth.google.Flow') as mock_flow_class:
         mock_flow_instance = MagicMock()
         mock_credentials = MagicMock()
         mock_credentials.token = "test_access_token"
@@ -199,7 +199,7 @@ async def test_google_oauth_callback_token_exchange_failure(test_client, mock_cr
     state = initiate_response.json()["state"]
     
     # Mock token exchange failure
-    with patch('interface.oauth.google.Flow') as mock_flow_class:
+    with patch('api.oauth.google.Flow') as mock_flow_class:
         mock_flow_instance = MagicMock()
         mock_flow_instance.fetch_token = MagicMock(side_effect=Exception("Token exchange failed"))
         mock_flow_class.from_client_config.return_value = mock_flow_instance
@@ -238,7 +238,7 @@ async def test_ticktick_oauth_initiate_missing_user_id(test_client):
 @pytest.mark.asyncio
 async def test_ticktick_oauth_initiate_missing_config(test_client, mock_credential_service):
     """Test that missing client credentials returns 500."""
-    with patch('interface.oauth.ticktick.settings') as mock_settings:
+    with patch('api.oauth.ticktick.settings') as mock_settings:
         mock_settings.TICKTICK_CLIENT_ID = None
         mock_settings.TICKTICK_CLIENT_SECRET = None
         

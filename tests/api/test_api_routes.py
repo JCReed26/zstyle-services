@@ -35,7 +35,7 @@ try:
 except (ImportError, Exception):
     # If main.py can't be imported, create a minimal app for testing
     from fastapi import FastAPI
-    from interface.api.routes import router as api_router
+    from api.api.routes import router as api_router
     app = FastAPI()
     app.include_router(api_router, prefix="/api")
     # Also add health at root level to match main.py
@@ -125,7 +125,7 @@ def test_health_check(test_client):
 @pytest.mark.asyncio
 async def test_get_user_state_success(test_client, mock_user, mock_activity_logs, mock_db_session, override_get_db_session):
     """Test that valid user_id returns user state with profile, activity, and memory summary."""
-    from interface.api.routes import router
+    from api.api.routes import router
     
     # Create mock async context manager for db session
     async def mock_db_session_cm():

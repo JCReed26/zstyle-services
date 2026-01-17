@@ -18,15 +18,20 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from core.database.engine import Base
-from core.config import reset_settings
+from database.engine import Base
+from app.config import reset_settings
 
 # Reset settings singleton to pick up test environment variables
 reset_settings()
 
 
-# Test database setup - using in-memory SQLite for fast, isolated tests
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Test database setup - use Supabase if TEST_DATABASE_URL is set, otherwise use in-memory SQLite
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
+# Convert postgresql:// to postgresql+asyncpg:// for async support
+if TEST_DATABASE_URL.startswith("postgresql://"):
+    TEST_DATABASE_URL = TEST_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionLocal = sessionmaker(
     test_engine,
@@ -57,9 +62,11 @@ async def db_session():
     - Creates all database tables before the test
     - Provides a fresh database session for each test
     - Rolls back any uncommitted changes after the test
-    - Drops all tables after the test completes
+    - Drops all tables after the test completes (only for in-memory SQLite)
     
     Each test gets a completely fresh database state, ensuring test isolation.
+    
+    Uses Supabase if TEST_DATABASE_URL is set, otherwise uses in-memory SQLite.
     """
     # Create tables
     async with test_engine.begin() as conn:
@@ -71,6 +78,7 @@ async def db_session():
         # Rollback any uncommitted changes
         await session.rollback()
     
-    # Cleanup - drop all tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    # Cleanup - drop all tables (only for in-memory SQLite)
+    if TEST_DATABASE_URL.startswith("sqlite"):
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)

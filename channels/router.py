@@ -25,7 +25,7 @@ from google.genai import types
 
 from .base import NormalizedMessage, MessageType
 from services.activity_log import activity_log_service
-from core.database.models import ActivityLogSource
+from database.models import ActivityLogSource
 
 
 logger = logging.getLogger(__name__)

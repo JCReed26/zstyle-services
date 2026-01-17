@@ -11,7 +11,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# Mock core.config.settings before any imports
+# Mock app.config.settings before any imports
 import unittest.mock
 _mock_settings = unittest.mock.MagicMock()
 _mock_settings.TELEGRAM_WEBHOOK_SECRET = None
@@ -19,10 +19,10 @@ _mock_settings.TELEGRAM_BOT_TOKEN = "test_token"
 _mock_settings.SECRET_KEY = "test_secret_key_that_is_long_enough_for_validation"
 _mock_settings.GOOGLE_API_KEY = "test_key"
 
-# Create a mock module for core.config
+# Create a mock module for app.config
 _mock_config_module = unittest.mock.MagicMock()
 _mock_config_module.settings = _mock_settings
-sys.modules['core.config'] = _mock_config_module
+sys.modules['app.config'] = _mock_config_module
 
 # Don't mock telegram module - let python-telegram-bot handle it
 # The MockUpdate class will be used in the fixture to patch Update.de_json
@@ -131,10 +131,10 @@ class MockEntity:
 def mock_update_class():
     """Patch Update class before importing modules."""
     # Mock Update class - import modules after mocking
-    import interface.telegram_webhook
+    import api.telegram_webhook
     import channels.telegram_bot.channel
     
-    interface.telegram_webhook.Update = MockUpdate
+    api.telegram_webhook.Update = MockUpdate
     channels.telegram_bot.channel.Update = MockUpdate
     
     yield MockUpdate
@@ -157,7 +157,7 @@ def mock_telegram_channel():
 @pytest.fixture
 def app_with_webhook(mock_telegram_channel):
     """Create a FastAPI app with webhook router."""
-    from interface.telegram_webhook import router, set_telegram_channel
+    from api.telegram_webhook import router, set_telegram_channel
     
     app = FastAPI()
     app.include_router(router)
@@ -250,7 +250,7 @@ def test_webhook_endpoint_success(client, mock_telegram_channel, sample_update_j
 
 def test_webhook_endpoint_invalid_secret(client, mock_telegram_channel, sample_update_json):
     """Test that invalid secret token returns 401."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = "correct_secret"
         
         response = client.post(
@@ -266,7 +266,7 @@ def test_webhook_endpoint_invalid_secret(client, mock_telegram_channel, sample_u
 
 def test_webhook_endpoint_missing_secret(client, mock_telegram_channel, sample_update_json):
     """Test that missing secret when required returns 401."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = "required_secret"
         
         response = client.post(
@@ -282,7 +282,7 @@ def test_webhook_endpoint_missing_secret(client, mock_telegram_channel, sample_u
 
 def test_webhook_endpoint_valid_secret(client, mock_telegram_channel, sample_update_json):
     """Test that valid secret token allows request through."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = "correct_secret"
         
         response = client.post(
@@ -298,7 +298,7 @@ def test_webhook_endpoint_valid_secret(client, mock_telegram_channel, sample_upd
 
 def test_webhook_endpoint_no_secret_required(client, mock_telegram_channel, sample_update_json):
     """Test that webhook works when TELEGRAM_WEBHOOK_SECRET is not set."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = None
         
         response = client.post(
@@ -313,7 +313,7 @@ def test_webhook_endpoint_no_secret_required(client, mock_telegram_channel, samp
 
 def test_webhook_invalid_json(client, mock_telegram_channel):
     """Test that invalid JSON returns 400."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = None
         
         response = client.post(
@@ -329,7 +329,7 @@ def test_webhook_invalid_json(client, mock_telegram_channel):
 
 def test_webhook_malformed_update(client, mock_telegram_channel):
     """Test that malformed update is handled gracefully."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = None
         
         # Malformed update (missing required fields)
@@ -352,7 +352,7 @@ def test_webhook_malformed_update(client, mock_telegram_channel):
 
 def test_webhook_processes_text_message(client, mock_telegram_channel, sample_update_json):
     """Test that text message updates are processed correctly."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = None
         
         response = client.post(
@@ -371,7 +371,7 @@ def test_webhook_processes_text_message(client, mock_telegram_channel, sample_up
 
 def test_webhook_processes_command(client, mock_telegram_channel, sample_command_update_json):
     """Test that command messages are handled."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = None
         
         response = client.post(
@@ -385,7 +385,7 @@ def test_webhook_processes_command(client, mock_telegram_channel, sample_command
 
 def test_webhook_processing_error(client, mock_telegram_channel, sample_update_json):
     """Test that processing errors are handled gracefully."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = None
         
         # Make process_webhook_update raise an exception
@@ -403,7 +403,7 @@ def test_webhook_processing_error(client, mock_telegram_channel, sample_update_j
 
 def test_webhook_empty_body(client, mock_telegram_channel):
     """Test that empty request body returns appropriate error."""
-    with patch('interface.telegram_webhook.settings') as mock_settings:
+    with patch('api.telegram_webhook.settings') as mock_settings:
         mock_settings.TELEGRAM_WEBHOOK_SECRET = None
         
         response = client.post(

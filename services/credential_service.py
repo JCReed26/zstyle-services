@@ -29,9 +29,9 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 
-from core.database.engine import AsyncSessionLocal
-from core.database.repositories import CredentialRepository
-from core.security import encrypt_credential, decrypt_credential
+from database.engine import AsyncSessionLocal
+from database.repositories import CredentialRepository
+from app.security import encrypt_credential, decrypt_credential
 
 
 class CredentialNotFoundError(Exception):
