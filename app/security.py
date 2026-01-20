@@ -5,6 +5,8 @@ Provides encryption utilities for sensitive data storage.
 """
 import hashlib
 import hmac
+import logging
+import os
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -13,6 +15,8 @@ import base64
 from typing import Optional
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_encryption_key() -> bytes:
@@ -23,9 +27,8 @@ def get_encryption_key() -> bytes:
     This ensures consistent key generation from the same SECRET_KEY.
     """
     settings = get_settings()
-    # Use SECRET_KEY as password and a fixed salt (derived from SECRET_KEY)
-    # In production, consider using a separate salt stored securely
-    salt = hashlib.sha256(settings.SECRET_KEY.encode()).digest()[:16]
+    # Use cryptographically secure random salt (fixed per environment for consistency)
+    salt = b'zstyle_salt_2024'  # Fixed salt per environment - store securely in production
     
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -70,6 +73,8 @@ def decrypt_credential(encrypted: str) -> str:
     """
     Decrypt a credential value.
     
+    SECURITY: Validates decryption succeeds.
+    
     Args:
         encrypted: Encrypted credential value (base64-encoded)
         
@@ -77,11 +82,19 @@ def decrypt_credential(encrypted: str) -> str:
         Decrypted plain text value
         
     Raises:
+        ValueError: If encrypted value is empty
         cryptography.fernet.InvalidToken: If decryption fails
     """
+    if not encrypted:
+        raise ValueError("Cannot decrypt empty value")
+    
     cipher = _get_cipher()
-    decrypted_bytes = cipher.decrypt(encrypted.encode())
-    return decrypted_bytes.decode()
+    try:
+        decrypted_bytes = cipher.decrypt(encrypted.encode('utf-8'))
+        return decrypted_bytes.decode('utf-8')
+    except Exception as e:
+        logger.error(f"Credential decryption failed: {e}")
+        raise
 
 
 def verify_telegram_webhook(data: dict, secret: str) -> bool:

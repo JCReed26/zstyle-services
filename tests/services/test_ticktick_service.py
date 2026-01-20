@@ -1,1 +1,0 @@
-"""Test for ticktick-py implementation in services/ticktick/ticktick_service.py"""

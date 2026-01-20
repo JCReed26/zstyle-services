@@ -7,6 +7,7 @@ Provides abstraction layer for database access.
 Usage:
     from database.repositories import UserRepository, CredentialRepository, OAuthStateRepository
 """
+import logging
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete
@@ -14,6 +15,9 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timezone, timedelta
 
 from database.models import User, Credential, OAuthState
+from database.availability import is_database_available
+
+logger = logging.getLogger(__name__)
 
 
 class UserRepository:
@@ -45,14 +49,22 @@ class UserRepository:
         Returns:
             User instance if found, None otherwise
         """
-        # Convert string to UUID if needed
-        if isinstance(user_id, str):
-            user_id = UUID(user_id)
-            
-        result = await self.session.execute(
-            select(User).where(User.id == user_id)
-        )
-        return result.scalar_one_or_none()
+        if not is_database_available():
+            logger.warning("Database unavailable - cannot retrieve user")
+            return None
+        
+        try:
+            # Convert string to UUID if needed
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+                
+            result = await self.session.execute(
+                select(User).where(User.id == user_id)
+            )
+            return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error(f"Database error retrieving user {user_id}: {e}", exc_info=True)
+            return None
     
     async def get_by_auth_uid(self, auth_uid: Union[UUID, str]) -> Optional[User]:
         """
@@ -78,10 +90,18 @@ class UserRepository:
         Returns:
             User instance if found, None otherwise
         """
-        result = await self.session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        return result.scalar_one_or_none()
+        if not is_database_available():
+            logger.warning(f"Database unavailable - cannot retrieve user by Telegram ID {telegram_id}")
+            return None
+        
+        try:
+            result = await self.session.execute(
+                select(User).where(User.telegram_id == telegram_id)
+            )
+            return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error(f"Database error retrieving user by Telegram ID {telegram_id}: {e}", exc_info=True)
+            return None
     
     async def create(self, user_id: Union[UUID, str], **kwargs) -> User:
         """
@@ -99,20 +119,30 @@ class UserRepository:
             The created User instance
             
         Raises:
+            RuntimeError: If database is not available
             IntegrityError: If unique constraint violated (e.g., duplicate telegram_id)
         """
-        # Convert string to UUID if needed
-        if isinstance(user_id, str):
-            user_id = UUID(user_id)
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot create user")
         
-        # Ensure id is set
-        kwargs['id'] = user_id
-        
-        user = User(**kwargs)
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        try:
+            # Convert string to UUID if needed
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+            
+            # Ensure id is set
+            kwargs['id'] = user_id
+            
+            user = User(**kwargs)
+            self.session.add(user)
+            await self.session.commit()
+            await self.session.refresh(user)
+            return user
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"Database error creating user {user_id}: {e}", exc_info=True)
+            raise
     
     async def update(self, user_id: Union[UUID, str], **kwargs) -> User:
         """
@@ -126,21 +156,31 @@ class UserRepository:
             The updated User instance
             
         Raises:
+            RuntimeError: If database is not available
             ValueError: If user not found
         """
-        user = await self.get_by_id(user_id)
-        if not user:
-            raise ValueError(f"User not found: {user_id}")
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot update user")
         
-        # Update attributes (exclude id and other protected fields)
-        protected_fields = {'id', 'created_at'}
-        for key, value in kwargs.items():
-            if key not in protected_fields and hasattr(user, key):
-                setattr(user, key, value)
-        
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        try:
+            user = await self.get_by_id(user_id)
+            if not user:
+                raise ValueError(f"User not found: {user_id}")
+            
+            # Update attributes (exclude id and other protected fields)
+            protected_fields = {'id', 'created_at'}
+            for key, value in kwargs.items():
+                if key not in protected_fields and hasattr(user, key):
+                    setattr(user, key, value)
+            
+            await self.session.commit()
+            await self.session.refresh(user)
+            return user
+        except (RuntimeError, ValueError):
+            raise
+        except Exception as e:
+            logger.error(f"Database error updating user {user_id}: {e}", exc_info=True)
+            raise
     
     async def delete(self, user_id: Union[UUID, str]) -> None:
         """
@@ -153,14 +193,24 @@ class UserRepository:
             user_id: The user's UUID (from auth.users.id)
             
         Raises:
+            RuntimeError: If database is not available
             ValueError: If user not found
         """
-        user = await self.get_by_id(user_id)
-        if not user:
-            raise ValueError(f"User not found: {user_id}")
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot delete user")
         
-        await self.session.delete(user)
-        await self.session.commit()
+        try:
+            user = await self.get_by_id(user_id)
+            if not user:
+                raise ValueError(f"User not found: {user_id}")
+            
+            await self.session.delete(user)
+            await self.session.commit()
+        except (RuntimeError, ValueError):
+            raise
+        except Exception as e:
+            logger.error(f"Database error deleting user {user_id}: {e}", exc_info=True)
+            raise
 
 
 class CredentialRepository:
@@ -195,17 +245,25 @@ class CredentialRepository:
         Returns:
             Credential instance if found, None otherwise
         """
-        # Convert string to UUID if needed
-        if isinstance(user_id, str):
-            user_id = UUID(user_id)
-            
-        result = await self.session.execute(
-            select(Credential).where(
-                Credential.user_id == user_id,
-                Credential.credential_type == credential_type
+        if not is_database_available():
+            logger.warning(f"Database unavailable - cannot retrieve credential for user {user_id}")
+            return None
+        
+        try:
+            # Convert string to UUID if needed
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+                
+            result = await self.session.execute(
+                select(Credential).where(
+                    Credential.user_id == user_id,
+                    Credential.credential_type == credential_type
+                )
             )
-        )
-        return result.scalar_one_or_none()
+            return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error(f"Database error retrieving credential: {e}", exc_info=True)
+            return None
     
     async def create(
         self,
@@ -233,25 +291,35 @@ class CredentialRepository:
             The created Credential instance
             
         Raises:
+            RuntimeError: If database is not available
             IntegrityError: If unique constraint violated
         """
-        # Convert string to UUID if needed
-        if isinstance(user_id, str):
-            user_id = UUID(user_id)
-            
-        credential = Credential(
-            user_id=user_id,
-            credential_type=credential_type,
-            token_value=token_value,
-            refresh_token=refresh_token,
-            extra_data=extra_data or {},
-            expires_at=expires_at,
-            is_active=is_active
-        )
-        self.session.add(credential)
-        await self.session.commit()
-        await self.session.refresh(credential)
-        return credential
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot create credential")
+        
+        try:
+            # Convert string to UUID if needed
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+                
+            credential = Credential(
+                user_id=user_id,
+                credential_type=credential_type,
+                token_value=token_value,
+                refresh_token=refresh_token,
+                extra_data=extra_data or {},
+                expires_at=expires_at,
+                is_active=is_active
+            )
+            self.session.add(credential)
+            await self.session.commit()
+            await self.session.refresh(credential)
+            return credential
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"Database error creating credential: {e}", exc_info=True)
+            raise
     
     async def update(
         self,
@@ -269,24 +337,34 @@ class CredentialRepository:
             The updated Credential instance
             
         Raises:
+            RuntimeError: If database is not available
             ValueError: If credential not found
         """
-        # Convert string to UUID if needed
-        if isinstance(credential_id, str):
-            credential_id = UUID(credential_id)
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot update credential")
+        
+        try:
+            # Convert string to UUID if needed
+            if isinstance(credential_id, str):
+                credential_id = UUID(credential_id)
+                
+            credential = await self.session.get(Credential, credential_id)
+            if not credential:
+                raise ValueError(f"Credential not found: {credential_id}")
             
-        credential = await self.session.get(Credential, credential_id)
-        if not credential:
-            raise ValueError(f"Credential not found: {credential_id}")
-        
-        # Update attributes
-        for key, value in kwargs.items():
-            if hasattr(credential, key):
-                setattr(credential, key, value)
-        
-        await self.session.commit()
-        await self.session.refresh(credential)
-        return credential
+            # Update attributes
+            for key, value in kwargs.items():
+                if hasattr(credential, key):
+                    setattr(credential, key, value)
+            
+            await self.session.commit()
+            await self.session.refresh(credential)
+            return credential
+        except (RuntimeError, ValueError):
+            raise
+        except Exception as e:
+            logger.error(f"Database error updating credential: {e}", exc_info=True)
+            raise
     
     async def update_by_user_and_type(
         self,
@@ -324,18 +402,28 @@ class CredentialRepository:
             credential_id: The credential's UUID
             
         Raises:
+            RuntimeError: If database is not available
             ValueError: If credential not found
         """
-        # Convert string to UUID if needed
-        if isinstance(credential_id, str):
-            credential_id = UUID(credential_id)
-            
-        credential = await self.session.get(Credential, credential_id)
-        if not credential:
-            raise ValueError(f"Credential not found: {credential_id}")
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot delete credential")
         
-        await self.session.delete(credential)
-        await self.session.commit()
+        try:
+            # Convert string to UUID if needed
+            if isinstance(credential_id, str):
+                credential_id = UUID(credential_id)
+                
+            credential = await self.session.get(Credential, credential_id)
+            if not credential:
+                raise ValueError(f"Credential not found: {credential_id}")
+            
+            await self.session.delete(credential)
+            await self.session.commit()
+        except (RuntimeError, ValueError):
+            raise
+        except Exception as e:
+            logger.error(f"Database error deleting credential: {e}", exc_info=True)
+            raise
     
     async def delete_by_user_and_type(
         self,
@@ -370,14 +458,22 @@ class CredentialRepository:
         Returns:
             List of Credential instances
         """
-        # Convert string to UUID if needed
-        if isinstance(user_id, str):
-            user_id = UUID(user_id)
-            
-        result = await self.session.execute(
-            select(Credential).where(Credential.user_id == user_id)
-        )
-        return list(result.scalars().all())
+        if not is_database_available():
+            logger.warning(f"Database unavailable - cannot retrieve credentials for user {user_id}")
+            return []
+        
+        try:
+            # Convert string to UUID if needed
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+                
+            result = await self.session.execute(
+                select(Credential).where(Credential.user_id == user_id)
+            )
+            return list(result.scalars().all())
+        except Exception as e:
+            logger.error(f"Database error retrieving credentials: {e}", exc_info=True)
+            return []
 
 
 class OAuthStateRepository:
@@ -414,25 +510,37 @@ class OAuthStateRepository:
             
         Returns:
             Created OAuthState instance
+            
+        Raises:
+            RuntimeError: If database is not available
         """
-        # Convert string to UUID if needed
-        if isinstance(user_id, str):
-            user_id = UUID(user_id)
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot create OAuth state")
         
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expiration_minutes)
-        
-        oauth_state = OAuthState(
-            state_token=state_token,
-            user_id=user_id,
-            service=service,
-            expires_at=expires_at,
-            consumed=False
-        )
-        
-        self.session.add(oauth_state)
-        await self.session.commit()
-        await self.session.refresh(oauth_state)
-        return oauth_state
+        try:
+            # Convert string to UUID if needed
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+            
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=expiration_minutes)
+            
+            oauth_state = OAuthState(
+                state_token=state_token,
+                user_id=user_id,
+                service=service,
+                expires_at=expires_at,
+                consumed=False
+            )
+            
+            self.session.add(oauth_state)
+            await self.session.commit()
+            await self.session.refresh(oauth_state)
+            return oauth_state
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"Database error creating OAuth state: {e}", exc_info=True)
+            raise
     
     async def get_by_token(
         self,
@@ -447,16 +555,24 @@ class OAuthStateRepository:
         Returns:
             OAuthState instance if found and valid, None otherwise
         """
-        result = await self.session.execute(
-            select(OAuthState).where(
-                and_(
-                    OAuthState.state_token == state_token,
-                    OAuthState.consumed == False,
-                    OAuthState.expires_at > datetime.now(timezone.utc)
+        if not is_database_available():
+            logger.warning("Database unavailable - cannot retrieve OAuth state")
+            return None
+        
+        try:
+            result = await self.session.execute(
+                select(OAuthState).where(
+                    and_(
+                        OAuthState.state_token == state_token,
+                        OAuthState.consumed == False,
+                        OAuthState.expires_at > datetime.now(timezone.utc)
+                    )
                 )
             )
-        )
-        return result.scalar_one_or_none()
+            return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error(f"Database error retrieving OAuth state: {e}", exc_info=True)
+            return None
     
     async def consume_token(
         self,
@@ -497,13 +613,21 @@ class OAuthStateRepository:
         Returns:
             Number of states deleted
         """
-        result = await self.session.execute(
-            delete(OAuthState).where(
-                OAuthState.expires_at < datetime.now(timezone.utc)
+        if not is_database_available():
+            logger.warning("Database unavailable - cannot cleanup expired OAuth states")
+            return 0
+        
+        try:
+            result = await self.session.execute(
+                delete(OAuthState).where(
+                    OAuthState.expires_at < datetime.now(timezone.utc)
+                )
             )
-        )
-        await self.session.commit()
-        return result.rowcount
+            await self.session.commit()
+            return result.rowcount
+        except Exception as e:
+            logger.error(f"Database error cleaning up expired OAuth states: {e}", exc_info=True)
+            return 0
 
 
 __all__ = [

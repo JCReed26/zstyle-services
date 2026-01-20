@@ -110,6 +110,25 @@ class Settings(BaseSettings):
         if not v:
             raise ValueError("Supabase keys are required")
         return v
+    
+    def has_database(self) -> bool:
+        """
+        Check if database configuration is present and valid.
+        
+        Returns:
+            True if all required database config is present, False otherwise
+        """
+        try:
+            # Check if all required database fields are set and non-empty
+            return bool(
+                self.DATABASE_URL and
+                self.SUPABASE_URL and
+                self.SUPABASE_ANON_KEY and
+                self.SUPABASE_SERVICE_ROLE_KEY
+            )
+        except Exception:
+            # If any field is missing or invalid, return False
+            return False
 
 
 # Create singleton instance (lazy-loaded for testability)

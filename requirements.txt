@@ -7,6 +7,9 @@ pydantic
 pydantic-settings
 fastapi
 fastapi-utilities
+openmemory-py>=1.2.3 # Pin to avoid BaseMessage import bug
+langchain-core
+
 
 
 mcp
@@ -28,7 +31,7 @@ asyncpg
 psycopg2-binary
 
 # Supabase
-supabase>=2.0.0
+supabase
 
 # Authentication and security
 cryptography

@@ -5,15 +5,11 @@
 # SERVICES:
 #   app          - Main FastAPI + ADK service (port 8000)
 #   telegram-bot - Telegram channel (connects to app)
+#   openmemory   - OpenMemory HTTP Server (port 8080)
 #
 # USAGE:
 #   Development:  docker-compose up --build
 #   Production:   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
-#   Reset DB:     docker-compose run --rm app python reset_db.py
-#
-# VOLUMES:
-#   - ./zstyle.db is mounted for persistent SQLite storage
-#   - ./client_secret.json for Google OAuth (if using calendar)
 #
 # =============================================================================
 
@@ -31,14 +27,13 @@ services:
       - .env
     environment:
       - PORT=8000
-    volumes:
-      # Persistent database
-      - ./zstyle.db:/app/zstyle.db
-      # Google OAuth credentials (optional)
-      - ./client_secret.json:/app/client_secret.json:ro
+      # Override OpenMemory URL for Docker network
+      - OPENMEMORY_URL=http://openmemory:8080
     depends_on:
       openmemory:
         condition: service_healthy
+    networks:
+      - zstyle-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -62,33 +57,33 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    volumes:
-      # Share database for user lookups
-      - ./zstyle.db:/app/zstyle.db
+    networks:
+      - zstyle-network
 
   # ---------------------------------------------------------------------------
   # OpenMemory HTTP Server
   # ---------------------------------------------------------------------------
   openmemory:
-    image: node:18-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.openmemory
     container_name: zstyle_openmemory
     restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "
-      apk add --no-cache curl git &&
-      rm -rf /tmp/repo &&
-      git clone --depth 1 https://github.com/CaviraOSS/OpenMemory.git /tmp/repo &&
-      cp -a /tmp/repo/. /app/ &&
-      cd /app/packages/openmemory-js &&
-      npm install &&
-      npm run build &&
-      npm start
-      "
     ports:
       - "8080:8080"
     environment:
       - PORT=8080
+      - NODE_ENV=production
+      # Add OpenMemory-specific env vars if needed
+      # - OPENMEMORY_API_KEY=${OPENMEMORY_API_KEY}
+      # - OPENMEMORY_STORAGE_PATH=/data
+    volumes:
+      # Persistent storage for embeddings
+      - openmemory-data:/app/data
+      # Optional: mount config if OpenMemory supports it
+      # - ./openmemory-config:/app/config
+    networks:
+      - zstyle-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -97,22 +92,43 @@ services:
       start_period: 30s
 
 # =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  zstyle-network:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  openmemory-data:
+    driver: local
+    # Optional: specify driver_opts for production
+    # driver_opts:
+    #   type: nfs
+    #   o: addr=your-nfs-server
+    #   device: ":/path/to/nfs/share"
+
+# =============================================================================
 # NOTES:
 # =============================================================================
 #
-# Adding a new channel:
-#   1. Create the channel in channels/your_channel/
-#   2. Add a new service here similar to telegram-bot
-#   3. Set AGENT_URL=http://app:8000
+# Key Improvements:
+# 1. Explicit Docker network for service communication
+# 2. Persistent volume for OpenMemory embeddings
+# 3. Build cache for OpenMemory (faster rebuilds)
+# 4. Removed SQLite volume (using PostgreSQL)
+# 5. Environment variable override for OpenMemory URL
 #
 # Environment Variables (.env):
-#   GOOGLE_API_KEY=your-gemini-api-key
-#   TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-#   DATABASE_URL=postgresql://... (optional, for production)
+#   - All variables from env.example
+#   - OPENMEMORY_URL will be overridden to http://openmemory:8080 in Docker
 #
-# For production, consider:
-#   - Using a separate PostgreSQL container
-#   - Adding nginx for SSL termination
-#   - Using Docker secrets for sensitive data
+# For production:
+#   - Use docker-compose.prod.yml override
+#   - Add nginx for SSL termination
+#   - Use Docker secrets for sensitive data
+#   - Consider managed PostgreSQL (Supabase) instead of container
 #
 # =============================================================================

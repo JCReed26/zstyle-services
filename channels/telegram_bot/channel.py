@@ -50,6 +50,7 @@ from channels.base import (
 )
 from database.engine import AsyncSessionLocal
 from database.repositories import UserRepository
+from database.availability import is_database_available
 
 
 logger = logging.getLogger(__name__)
@@ -107,7 +108,6 @@ class TelegramChannel(ConversationalChannel):
         await self.application.initialize()
         await self.application.start()
         
-        # Note: Polling is removed - use webhook mode instead
         # For polling mode, call: await self.application.updater.start_polling()
         
         logger.info("Telegram channel started successfully")
@@ -596,6 +596,8 @@ class TelegramChannel(ConversationalChannel):
         Uses Supabase Auth for user identification. Users must authenticate via
         phone + OTP first. This method links Telegram ID to existing authenticated users.
         
+        Supports graceful degradation - returns temporary ID if database unavailable.
+        
         Args:
             telegram_id: Telegram user ID
             username: Optional Telegram username
@@ -603,7 +605,7 @@ class TelegramChannel(ConversationalChannel):
                         (used for linking, but user must authenticate via OTP first)
         
         Returns:
-            User ID (UUID string from auth.users.id)
+            User ID (UUID string from auth.users.id) or temporary ID if database unavailable
         
         Raises:
             ValueError: If user not found and needs to authenticate
@@ -612,37 +614,56 @@ class TelegramChannel(ConversationalChannel):
         if telegram_id in self._user_id_cache:
             return str(self._user_id_cache[telegram_id])
         
-        async with AsyncSessionLocal() as db:
-            repo = UserRepository(db)
-            
-            # Check if user exists by Telegram ID
-            user = await repo.get_by_telegram_id(telegram_id)
-            
-            if user:
-                # User exists - update username if needed
-                if username and user.username != username:
-                    user = await repo.update(user.id, username=username)
-                self._user_id_cache[telegram_id] = user.id
-                return str(user.id)
-            
-            # User doesn't exist - they need to authenticate via phone OTP first
-            # We cannot create users without Supabase Auth authentication
+        # If database unavailable, return temporary ID
+        if not is_database_available():
             logger.warning(
-                f"User with Telegram ID {telegram_id} not found. "
-                "User must authenticate via phone OTP first. "
-                "Returning temporary ID - user should authenticate via /auth command."
+                f"Database unavailable - using temporary ID for Telegram user {telegram_id}. "
+                "User should authenticate when database is available."
             )
-            
-            # Return a temporary identifier
-            # This allows the system to continue, but user should authenticate
-            # The temporary ID will be replaced after phone auth completes
             import uuid
             temp_id = str(uuid.uuid4())
             self._user_id_cache[telegram_id] = temp_id
-            
-            # TODO: Prompt user to authenticate via /auth command
-            # For now, return temp ID to prevent system crash
-            
+            return temp_id
+        
+        try:
+            async with AsyncSessionLocal() as db:
+                repo = UserRepository(db)
+                
+                # Check if user exists by Telegram ID
+                user = await repo.get_by_telegram_id(telegram_id)
+                
+                if user:
+                    # User exists - update username if needed
+                    if username and user.username != username:
+                        try:
+                            user = await repo.update(user.id, username=username)
+                        except Exception as e:
+                            logger.warning(f"Failed to update username: {e}")
+                    self._user_id_cache[telegram_id] = user.id
+                    return str(user.id)
+                
+                # User doesn't exist - they need to authenticate via phone OTP first
+                # We cannot create users without Supabase Auth authentication
+                logger.warning(
+                    f"User with Telegram ID {telegram_id} not found. "
+                    "User must authenticate via phone OTP first. "
+                    "Returning temporary ID - user should authenticate via /auth command."
+                )
+                
+                # Return a temporary identifier
+                # This allows the system to continue, but user should authenticate
+                # The temporary ID will be replaced after phone auth completes
+                import uuid
+                temp_id = str(uuid.uuid4())
+                self._user_id_cache[telegram_id] = temp_id
+                
+                return temp_id
+        except Exception as e:
+            logger.error(f"Database error in _get_or_create_user: {e}", exc_info=True)
+            # Return temporary ID as fallback
+            import uuid
+            temp_id = str(uuid.uuid4())
+            self._user_id_cache[telegram_id] = temp_id
             return temp_id
     
     async def link_telegram_to_user(

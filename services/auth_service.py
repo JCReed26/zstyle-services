@@ -3,14 +3,18 @@ Authentication Service
 
 Handles user authentication using Supabase Auth with phone number as primary identifier.
 Phone numbers are stored in auth.users.phone, not in the custom users table.
+
+Supports graceful degradation - returns None/empty results if database unavailable.
 """
 import logging
 from typing import Optional, Dict, Any
 from uuid import UUID
 
 from app.supabase_client import get_supabase_client
+from app.config import settings
 from database.engine import AsyncSessionLocal
 from database.repositories import UserRepository
+from database.availability import is_database_available
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +58,14 @@ class AuthService:
             Dictionary with status and message
         
         Raises:
-            ValueError: If Supabase is not configured
+            RuntimeError: If Supabase is not configured or database unavailable
+            ValueError: If OTP sending fails
         """
+        if not settings.has_database():
+            raise RuntimeError("Database is not configured - authentication unavailable")
+        
         if not self.supabase:
-            raise ValueError("Supabase Auth is not configured")
+            raise RuntimeError("Supabase Auth is not configured")
         
         try:
             # Send OTP via Supabase Auth
@@ -72,6 +80,8 @@ class AuthService:
                 "message": "OTP sent successfully",
                 "phone": phone_number  # Return for verification
             }
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.error(f"Failed to send OTP: {e}", exc_info=True)
             raise ValueError(f"Failed to send OTP: {str(e)}")
@@ -114,17 +124,24 @@ class AuthService:
             refresh_token = response.session.refresh_token
             
             # Profile should be auto-created by trigger, but verify it exists
-            async with AsyncSessionLocal() as db:
-                repo = UserRepository(db)
-                user = await repo.get_by_id(user_id)
-                
-                if not user:
-                    # Trigger may not have fired yet, create profile explicitly
-                    logger.warning(f"Profile not found for user {user_id}, creating explicitly")
-                    user = await repo.create(user_id=user_id)
-                    logger.info(f"Created profile for user {user_id}")
-                else:
-                    logger.debug(f"Profile exists for user {user_id}")
+            if is_database_available():
+                try:
+                    async with AsyncSessionLocal() as db:
+                        repo = UserRepository(db)
+                        user = await repo.get_by_id(user_id)
+                        
+                        if not user:
+                            # Trigger may not have fired yet, create profile explicitly
+                            logger.warning(f"Profile not found for user {user_id}, creating explicitly")
+                            user = await repo.create(user_id=user_id)
+                            logger.info(f"Created profile for user {user_id}")
+                        else:
+                            logger.debug(f"Profile exists for user {user_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to create/verify user profile: {e}")
+                    # Continue anyway - auth succeeded even if profile creation failed
+            else:
+                logger.warning(f"Database unavailable - user {user_id} authenticated but profile not created")
             
             return {
                 "success": True,
@@ -148,20 +165,28 @@ class AuthService:
             user_id: UUID from auth.users.id
         
         Returns:
-            User dictionary or None if not found
+            User dictionary or None if not found or database unavailable
         """
-        async with AsyncSessionLocal() as db:
-            repo = UserRepository(db)
-            user = await repo.get_by_id(user_id)
-            
-            if user:
-                return {
-                    "id": str(user.id),
-                    "telegram_id": user.telegram_id,
-                    "username": user.username,
-                    "display_name": user.display_name,
-                    "is_active": user.is_active
-                }
+        if not is_database_available():
+            logger.warning(f"Database unavailable - cannot retrieve user {user_id}")
+            return None
+        
+        try:
+            async with AsyncSessionLocal() as db:
+                repo = UserRepository(db)
+                user = await repo.get_by_id(user_id)
+                
+                if user:
+                    return {
+                        "id": str(user.id),
+                        "telegram_id": user.telegram_id,
+                        "username": user.username,
+                        "display_name": user.display_name,
+                        "is_active": user.is_active
+                    }
+                return None
+        except Exception as e:
+            logger.error(f"Error retrieving user {user_id}: {e}", exc_info=True)
             return None
     
     async def link_telegram_id(
@@ -182,30 +207,40 @@ class AuthService:
             Updated user information
         
         Raises:
+            RuntimeError: If database is not available
             ValueError: If user not found
         """
-        async with AsyncSessionLocal() as db:
-            repo = UserRepository(db)
-            user = await repo.get_by_id(user_id)
-            
-            if not user:
-                raise ValueError(f"User not found: {user_id}")
-            
-            # Update Telegram ID and username
-            update_data = {"telegram_id": telegram_id}
-            if telegram_username:
-                update_data["username"] = telegram_username
-            
-            user = await repo.update(user.id, **update_data)
-            
-            logger.info(f"Linked Telegram ID {telegram_id} to user {user.id}")
-            
-            return {
-                "id": str(user.id),
-                "telegram_id": user.telegram_id,
-                "username": user.username,
-                "display_name": user.display_name
-            }
+        if not is_database_available():
+            raise RuntimeError("Database is not available - cannot link Telegram ID")
+        
+        try:
+            async with AsyncSessionLocal() as db:
+                repo = UserRepository(db)
+                user = await repo.get_by_id(user_id)
+                
+                if not user:
+                    raise ValueError(f"User not found: {user_id}")
+                
+                # Update Telegram ID and username
+                update_data = {"telegram_id": telegram_id}
+                if telegram_username:
+                    update_data["username"] = telegram_username
+                
+                user = await repo.update(user.id, **update_data)
+                
+                logger.info(f"Linked Telegram ID {telegram_id} to user {user.id}")
+                
+                return {
+                    "id": str(user.id),
+                    "telegram_id": user.telegram_id,
+                    "username": user.username,
+                    "display_name": user.display_name
+                }
+        except (RuntimeError, ValueError):
+            raise
+        except Exception as e:
+            logger.error(f"Error linking Telegram ID: {e}", exc_info=True)
+            raise
     
     async def get_user_by_phone_from_supabase(self, phone_number: str) -> Optional[Dict[str, Any]]:
         """

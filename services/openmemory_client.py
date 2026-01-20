@@ -1,160 +1,105 @@
 """
-OpenMemory HTTP Client
+OpenMemory Client - Simple embedding storage.
 
-HTTP client for interacting with OpenMemory HTTP server.
-Provides centralized memory storage accessible by multiple agents.
+Connects to OpenMemory service for storing and retrieving embeddings.
+User isolation handled by OpenMemory via metadata filtering.
+
+Based on: https://github.com/caviraoss/openmemory
 """
 import logging
-from typing import List, Dict, Optional, Any
-import httpx
-
+from typing import Optional, List, Dict, Any
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-
-class OpenMemoryError(Exception):
-    """Base exception for OpenMemory client errors."""
-    pass
+# Lazy import - use correct import path from openmemory.client to avoid langchain connector bug
+try:
+    from openmemory.client import Memory
+except (ImportError, NameError) as e:
+    logger.error(f"Failed to import Memory from openmemory.client: {e}.")
+    logger.error("Please check openmemory-py version or see https://github.com/caviraoss/openmemory")
+    # Set to None so we can check later
+    Memory = None  # type: ignore
 
 
 class OpenMemoryClient:
-    """
-    HTTP client for OpenMemory server.
-    
-    Provides methods to store and search memories via HTTP API.
-    Supports user namespacing for multi-tenant memory isolation.
-    """
+    """Simple client for OpenMemory embedding service."""
     
     def __init__(self):
-        """
-        Initialize OpenMemory client.
-        
-        Uses settings.OPENMEMORY_URL and settings.OPENMEMORY_API_KEY for configuration.
-        """
-        self.base_url = settings.OPENMEMORY_URL
-        self.api_key = settings.OPENMEMORY_API_KEY
-        self._client = httpx.AsyncClient(timeout=30.0)
-        logger.debug(f"OpenMemoryClient initialized with URL: {self.base_url}")
-    
-    def _get_headers(self) -> Dict[str, str]:
-        """Get HTTP headers including authentication if API key is present."""
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
-    
-    async def store_memory(
-        self,
-        user_id: str,
-        content: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """
-        Store a memory in OpenMemory.
-        
-        Args:
-            user_id: User identifier (used as namespace/collection)
-            content: Memory content to store
-            metadata: Optional metadata dictionary
-            
-        Returns:
-            Memory ID string
-            
-        Raises:
-            httpx.HTTPStatusError: If HTTP request fails
-            httpx.NetworkError: If network request fails
-        """
-        url = f"{self.base_url}/api/memories"
-        data = {
-            "user_id": user_id,
-            "content": content,
-            "metadata": metadata or {}
-        }
-        
-        try:
-            response = await self._client.post(
-                url,
-                json=data,
-                headers=self._get_headers()
+        """Initialize OpenMemory client."""
+        if Memory is None:
+            raise RuntimeError(
+                "Memory import failed from openmemory.client. "
+                "Please check the package version or see logs for details."
             )
-            response.raise_for_status()
-            result = response.json()
-            memory_id = result.get("id")
-            
-            if not memory_id:
-                raise OpenMemoryError(f"OpenMemory API did not return memory ID: {result}")
-            
-            logger.debug(f"Stored memory {memory_id} for user {user_id}")
-            return memory_id
-            
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error storing memory for user {user_id}: {e}")
-            raise
-        except httpx.NetworkError as e:
-            logger.error(f"Network error storing memory for user {user_id}: {e}")
-            raise
+        # Configure Memory client for remote mode
+        # See: https://github.com/caviraoss/openmemory
+        if settings.OPENMEMORY_URL and settings.OPENMEMORY_URL != "http://openmemory:8080":
+            # Remote mode with explicit URL
+            self.client = Memory(
+                mode='remote',
+                url=settings.OPENMEMORY_URL,
+                api_key=settings.OPENMEMORY_API_KEY
+            )
+            logger.info(f"OpenMemory client initialized (remote mode): {settings.OPENMEMORY_URL}")
+        else:
+            # Local mode (default) - uses SQLite
+            self.client = Memory()
+            logger.info("OpenMemory client initialized (local mode)")
     
-    async def search_memories(
+    async def store(
         self,
-        user_id: str,
+        content: str,
+        user_id: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Store content as embedding in OpenMemory."""
+        try:
+            # Prepare metadata with user_id for filtering
+            memory_metadata = metadata or {}
+            if user_id:
+                memory_metadata["user_id"] = user_id
+            
+            # Store in OpenMemory (handles embedding generation)
+            # OpenMemory methods are async according to docs
+            result = await self.client.add(
+                content,
+                user_id=user_id,
+                tags=tags or [],
+                metadata=memory_metadata
+            )
+            
+            return {"status": "success", "result": result}
+        except Exception as e:
+            logger.error(f"Error storing memory: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+    
+    async def search(
+        self,
         query: str,
+        user_id: Optional[str] = None,
         limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """
-        Search memories for a user.
-        
-        Args:
-            user_id: User identifier to search within
-            query: Search query string
-            limit: Maximum number of results to return (default: 10)
-            
-        Returns:
-            List of memory dictionaries with id, content, metadata fields
-            
-        Raises:
-            httpx.HTTPStatusError: If HTTP request fails
-            httpx.NetworkError: If network request fails
-        """
-        url = f"{self.base_url}/api/memories"
-        params = {
-            "user_id": user_id,
-            "query": query,
-            "limit": limit
-        }
-        
+        """Search embeddings by query, filtered by user_id."""
         try:
-            response = await self._client.get(
-                url,
-                params=params,
-                headers=self._get_headers()
-            )
-            response.raise_for_status()
-            results = response.json()
+            # Search OpenMemory (handles semantic search)
+            # OpenMemory's search method is async and accepts user_id directly
+            results = await self.client.search(query, user_id=user_id, limit=limit)
             
-            # Ensure results is a list
-            if not isinstance(results, list):
-                logger.warning(f"OpenMemory API returned non-list result: {results}")
-                return []
-            
-            logger.debug(f"Found {len(results)} memories for user {user_id} query '{query}'")
             return results
-            
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error searching memories for user {user_id}: {e}")
-            raise
-        except httpx.NetworkError as e:
-            logger.error(f"Network error searching memories for user {user_id}: {e}")
-            raise
-    
-    async def close(self):
-        """Close the HTTP client."""
-        await self._client.aclose()
-    
-    async def __aenter__(self):
-        """Async context manager entry."""
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.close()
+        except Exception as e:
+            logger.error(f"Error searching memories: {e}", exc_info=True)
+            return []
+
+
+# Global singleton instance
+_openmemory_client: Optional[OpenMemoryClient] = None
+
+
+def get_openmemory_client() -> OpenMemoryClient:
+    """Get singleton OpenMemory client instance."""
+    global _openmemory_client
+    if _openmemory_client is None:
+        _openmemory_client = OpenMemoryClient()
+    return _openmemory_client

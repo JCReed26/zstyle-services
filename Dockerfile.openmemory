@@ -1,0 +1,20 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache curl git
+
+# Clone and build OpenMemory
+RUN git clone --depth 1 https://github.com/CaviraOSS/OpenMemory.git /tmp/repo && \
+    cp -a /tmp/repo/. /app/ && \
+    cd /app/packages/openmemory-js && \
+    npm install && \
+    npm run build
+
+# Set final working directory
+WORKDIR /app/packages/openmemory-js
+
+EXPOSE 8080
+
+CMD ["npm", "start"]

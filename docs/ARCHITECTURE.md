@@ -9,49 +9,36 @@ ZStyle Services is an AI-powered Executive Function Coach system built on Google
 ### High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Communication Layer                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Telegram   │  │    API       │  │   Webhook    │      │
-│  │   Channel    │  │   Bridge     │  │   Router     │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                 │              │
-│         └─────────────────┼─────────────────┘              │
-│                           │                                 │
-│                    NormalizedMessage                        │
-└───────────────────────────┼─────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Routing Layer                          │
-│                    MessageRouter                            │
-│  - Normalizes messages                                      │
-│  - Manages ADK sessions                                     │
-│  - Routes to agent layer                                    │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       Agent Layer                            │
-│              Google ADK Runner + Agents                      │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │         Executive Function Coach Agent              │    │
-│  │  - Goal setting and tracking                        │    │
-│  │  - Task management                                  │    │
-│  │  - Calendar integration                             │    │
-│  │  - Memory-aware coaching                            │    │
-│  └─────────────────────────────────────────────────────┘    │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-        ▼                   ▼                   ▼
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│   Memory     │   │    Tools     │   │  Sessions    │
-│   Service    │   │              │   │              │
-│ (OpenMemory) │   │ TickTick     │   │  (InMemory)  │
-│              │   │ Google APIs  │   │              │
-└──────────────┘   └──────────────┘   └──────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ Communication Layer (channels/)                        │
+│ - TelegramChannel (polling mode)                       │
+│ - API Bridge (/api/chat)                               │
+│ - NormalizedMessage abstraction                        │
+└───────────────────┬───────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────┐
+│ Routing Layer (channels/router.py)                     │
+│ - MessageRouter                                        │
+│ - Routes to ADK Runner                                 │
+│ - Activity logging                                      │
+└───────────────────┬───────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────┐
+│ Agent Layer (agent/exec_func_coach/)                   │
+│ - Google ADK Runner                                    │
+│ - Executive Function Coach Agent                       │
+│ - Tools: TickTick, Google Calendar, Gmail              │
+└───────────────────┬───────────────────────────────────┘
+                    │
+        ┌───────────┼───────────┐
+        ▼           ▼           ▼
+┌──────────┐  ┌──────────┐  ┌──────────┐
+│ Memory   │  │ Database │  │ Services │
+│(OpenMem) │  │(Supabase)│  │(Creds,   │
+│          │  │          │  │ Auth)    │
+└──────────┘  └──────────┘  └──────────┘
 ```
 
 ## Core Components
@@ -59,18 +46,6 @@ ZStyle Services is an AI-powered Executive Function Coach system built on Google
 ### 1. Communication Layer (`channels/`)
 
 **Purpose**: Abstract away channel-specific details and provide a unified interface to the agent layer.
-
-#### Base Channel Architecture
-
-- **`BaseInputChannel`**: Abstract base for all channels
-  - Handles message normalization
-  - Provides response sending interface
-  - Used for stateless channels (webhooks, API endpoints)
-
-- **`ConversationalChannel`**: Extended base for chat interfaces
-  - Maintains conversation context with 300-second keep-alive
-  - Handles session management
-  - Used for Telegram, Discord, Slack, etc.
 
 #### NormalizedMessage Format
 
@@ -93,14 +68,13 @@ class NormalizedMessage:
 - Agents never need to know which channel a message came from
 - Easy to add new channels without changing agent code
 - Consistent interface for all communication sources
-- Enables multi-channel user experiences
 
 #### Current Channels
 
 **Telegram Channel** (`channels/telegram_bot/`)
 - Supports text, images, voice, documents
 - Commands: `/start`, `/newchat`, `/help`, `/logs`
-- Webhook and polling modes
+- Uses polling mode (no webhook)
 - User ID mapping (Telegram ID → Internal User ID)
 
 **API Bridge** (`app/main.py` - `/api/chat`)
@@ -114,11 +88,10 @@ class NormalizedMessage:
 
 #### MessageRouter Responsibilities
 
-1. **Message Normalization**: Converts NormalizedMessage to ADK Content format
-2. **Session Management**: Creates/maintains ADK sessions per user
-3. **Agent Invocation**: Routes messages to ADK Runner
-4. **Activity Logging**: Logs all user interactions
-5. **Error Handling**: Graceful error recovery
+1. **Message Conversion**: Converts NormalizedMessage to ADK Content format
+2. **Agent Invocation**: Routes messages to ADK Runner
+3. **Activity Logging**: Logs all user interactions
+4. **Error Handling**: Graceful error recovery
 
 #### Flow
 
@@ -127,25 +100,26 @@ NormalizedMessage → MessageRouter.route()
     ↓
 1. Log incoming message
     ↓
-2. Get/create ADK session
+2. Get/create ADK session (ephemeral conversation state)
     ↓
 3. Convert to ADK Content format
     ↓
 4. Run agent via ADK Runner
     ↓
-5. Log response
+5. Agent retrieves long-term memory from OpenMemory
     ↓
-6. Return text response
+6. Log response
+    ↓
+7. Return text response
 ```
 
 **Why separate routing layer?**
 - Single point of integration for all channels
-- Centralized session management
 - Consistent error handling
 - Activity logging in one place
 - Easy to add middleware (rate limiting, auth, etc.)
 
-### 3. Agent Layer (`agents/`)
+### 3. Agent Layer (`agent/exec_func_coach/`)
 
 **Purpose**: Core AI agent logic using Google ADK framework.
 
@@ -153,21 +127,14 @@ NormalizedMessage → MessageRouter.route()
 
 **ADK (Agent Development Kit)** provides:
 - Agent execution framework
-- Session management
-- Memory service integration
+- Session management (ephemeral conversation state)
+- Memory service integration (long-term semantic memory)
 - Tool calling infrastructure
 - Multi-modal support (text, images, audio)
 
-**Why ADK?**
-- DEV FILL IN: [Reasoning for choosing ADK over other frameworks]
-- Provides built-in session management
-- Integrates with Google's Gemini models
-- Supports tool calling and memory services
-- Handles complex agent workflows
-
 #### Executive Function Coach Agent
 
-**Location**: `agents/exec_func_coach/`
+**Location**: `agent/exec_func_coach/`
 
 **Capabilities**:
 1. **Personal Assistant**
@@ -189,20 +156,20 @@ NormalizedMessage → MessageRouter.route()
 - **OpenMemory**: Long-term memory storage
 
 **Memory Integration**:
-- Automatically stores session data to OpenMemory
-- Retrieves relevant memories for context
+- Automatically stores conversation data to OpenMemory
+- Retrieves relevant memories for context via semantic search
 - Persists user preferences, goals, and systems
 - No manual memory management required
 
-### 4. Memory Service (`services/memory/`)
+### 4. Memory Service (`services/openmemory_adk_service.py`)
 
-**Purpose**: Long-term memory storage using OpenMemory.
+**Purpose**: Long-term semantic memory storage using OpenMemory.
 
 #### OpenMemory Architecture
 
 **OpenMemory** is a separate HTTP service that provides:
 - Vector-based memory storage
-- Semantic search capabilities
+- Semantic search capabilities (RAG)
 - User namespacing for multi-tenancy
 - Metadata support
 
@@ -217,13 +184,6 @@ NormalizedMessage → MessageRouter.route()
    - Automatically called by ADK Runner
    - Converts ADK sessions to memory format
 
-**Why OpenMemory?**
-- DEV FILL IN: [Reasoning for choosing OpenMemory]
-- Provides semantic search (RAG capabilities)
-- Separate service enables scaling
-- User-isolated memory storage
-- Metadata support for filtering
-
 **Memory Flow**:
 ```
 ADK Session → OpenMemoryADKService.add_session_to_memory()
@@ -232,9 +192,7 @@ Format session data as content string
     ↓
 OpenMemoryClient.store_memory()
     ↓
-OpenMemory HTTP API
-    ↓
-Vector storage + indexing
+OpenMemory HTTP API → Vector storage + indexing
 ```
 
 **Memory Retrieval**:
@@ -245,10 +203,12 @@ OpenMemoryADKService.search_memory()
     ↓
 OpenMemoryClient.search_memories()
     ↓
-Semantic search in OpenMemory
-    ↓
-Formatted results returned to agent
+Semantic search in OpenMemory → Formatted results returned to agent
 ```
+
+**Note on Sessions vs Memory**:
+- **ADK Sessions**: Ephemeral conversation state for managing the current request/response cycle. Stored in-memory, lightweight, not persisted.
+- **OpenMemory**: Long-term semantic memory that persists across conversations. Stores user preferences, goals, past conversations, and retrieves relevant context via semantic search.
 
 ### 5. Database Layer (`database/`)
 
@@ -258,8 +218,7 @@ Formatted results returned to agent
 
 **User** (`database/models.py`)
 - Core user identity
-- Maps channel IDs (Telegram, Discord) to internal user IDs
-- User profile information
+- Maps channel IDs (Telegram) to internal user IDs
 - Links to Supabase Auth users
 
 **Credential** (`database/models.py`)
@@ -282,12 +241,7 @@ Formatted results returned to agent
 **Current Setup**:
 - Production: PostgreSQL (Supabase) - required
 - Uses `DATABASE_URL` environment variable
-
-**Why SQLAlchemy Async?**
-- Async/await support for FastAPI
-- Type-safe queries
-- Database-agnostic queries
-- Connection pooling for performance
+- Async SQLAlchemy with connection pooling
 
 **Repository Pattern**:
 - All database operations go through repositories (`database/repositories.py`)
@@ -301,81 +255,43 @@ Formatted results returned to agent
 #### Key Services
 
 **CredentialService** (`services/credential_service.py`)
-- Encrypts/decrypts sensitive tokens
+- Encrypts/decrypts sensitive tokens using Fernet encryption
 - Stores credentials per user/service
 - Handles token refresh logic
-- Uses Fernet encryption (PBKDF2 key derivation)
 
 **ActivityLogService** (`services/activity_log.py`)
 - Logs user interactions
 - Retrieves recent activity
 - Formats logs for display
 
-**TickTickService** (`services/ticktick/ticktick_service.py`)
-- OAuth flow for TickTick
-- Client initialization
-- Token management
+### 7. Security (`app/security.py`)
 
-### 7. Security Layer (`core/security.py`)
-
-**Purpose**: Encryption and security utilities.
-
-#### Encryption
+**Purpose**: Encryption utilities for sensitive data storage.
 
 **Credential Encryption**:
-- Uses Fernet (symmetric encryption)
+- Uses Fernet symmetric encryption
 - Key derived from SECRET_KEY via PBKDF2HMAC
 - Encrypts tokens, refresh tokens, API keys
-
-**Issues**:
-- ⚠️ Salt derived from SECRET_KEY (weakens security)
-- ⚠️ No key rotation mechanism
-- ⚠️ Single point of failure if SECRET_KEY compromised
-
-**Webhook Verification**:
-- ⚠️ Not implemented (placeholder returns False)
-- ⚠️ Security risk for webhook endpoints
-
-### 8. API Layer (`api/`)
-
-**Purpose**: HTTP endpoints and OAuth flows.
-
-#### Routes
-
-**API Routes** (`api/api/routes.py`)
-- `/api/health` - Health check
-- `/api/user/state` - User state retrieval
-
-**OAuth Routes** (`api/oauth/`)
-- Google OAuth flow
-- TickTick OAuth flow
-
-**Authentication Routes** (`api/auth/`)
-- Phone authentication (OTP via Supabase Auth)
-
-**Webhook Routes** (`api/telegram_webhook.py`)
-- `/webhook/telegram` - Telegram webhook endpoint
-- Processes Telegram updates
-- Routes to TelegramChannel
+- Simple, effective encryption for credential storage
 
 ## Data Flow Examples
 
 ### Example 1: User sends Telegram message
 
 ```
-1. Telegram → Webhook endpoint
+1. Telegram polling → TelegramChannel receives update
    ↓
-2. TelegramChannel.process_webhook_update()
+2. Normalize to NormalizedMessage
    ↓
-3. Normalize to NormalizedMessage
+3. MessageRouter.route()
    ↓
-4. MessageRouter.route()
+4. Get/create ADK session (ephemeral)
    ↓
-5. Get/create ADK session
+5. Convert to ADK Content
    ↓
-6. Convert to ADK Content
+6. ADK Runner.run_async()
    ↓
-7. ADK Runner.run_async()
+7. Agent retrieves relevant memories from OpenMemory
    ↓
 8. Agent processes with tools/memory
    ↓
@@ -404,38 +320,14 @@ Formatted results returned to agent
 8. Agent uses context in response
 ```
 
-### Example 3: Agent creates TickTick task
-
-```
-1. Agent decides to create task
-   ↓
-2. Calls TickTick tool
-   ↓
-3. Tool fetches credentials via CredentialService
-   ↓
-4. Decrypts OAuth token
-   ↓
-5. Initializes TickTickClient
-   ↓
-6. Creates task via TickTick API
-   ↓
-7. Returns result to agent
-   ↓
-8. Agent responds to user
-```
-
 ## Deployment Architecture
 
 ### Docker Compose Setup
 
 **Services**:
 1. **app**: Main FastAPI + ADK service (port 8000)
-2. **telegram-bot**: Telegram channel (connects to app)
+2. **telegram-bot**: Telegram channel using polling (connects to app)
 3. **openmemory**: OpenMemory HTTP server (port 8080)
-
-**Current Issues**:
-- ⚠️ No production docker-compose override
-- ⚠️ No nginx/SSL termination
 
 ### Environment Configuration
 
@@ -449,34 +341,9 @@ Formatted results returned to agent
 - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key
 
 **Optional Variables**:
-- `OPENMEMORY_URL`: OpenMemory service URL
+- `OPENMEMORY_URL`: OpenMemory service URL (default: http://openmemory:8080)
 - `OPENMEMORY_API_KEY`: OpenMemory API key
 - OAuth client IDs/secrets
-
-## Scalability Considerations
-
-### Current Limitations
-
-1. **In-Memory Session Storage**
-   - Sessions lost on restart
-   - Cannot scale horizontally
-   - No session persistence
-
-2. **In-Memory Conversation Contexts**
-   - Lost on restart
-   - No sharing between instances
-
-### Scaling Strategy
-
-**Short-term**:
-- Use Redis for session storage
-- Use Redis for conversation contexts
-
-**Long-term**:
-- Horizontal scaling with load balancer
-- Database read replicas
-- Caching layer (Redis)
-- Message queue for async processing
 
 ## Technology Stack
 
@@ -490,7 +357,7 @@ Formatted results returned to agent
 - **OpenMemory**: Memory/RAG service
 - **TickTick**: Task management API
 - **Google APIs**: Calendar, Gmail
-- **Telegram**: Bot API
+- **Telegram**: Bot API (polling mode)
 
 ### Infrastructure
 - **Docker**: Containerization
@@ -514,18 +381,20 @@ Formatted results returned to agent
 **Decision**: Use separate OpenMemory service for long-term memory.
 
 **Rationale**:
-- DEV FILL IN: [Reasoning]
-- Semantic search capabilities
+- Semantic search capabilities (RAG)
 - Vector-based storage
 - Separate scaling concerns
+- User-isolated memory storage
 
-### Why In-Memory Sessions?
+### Why In-Memory ADK Sessions?
 
 **Decision**: Use InMemorySessionService for ADK sessions.
 
 **Rationale**:
-- DEV FILL IN: [Initial reasoning - likely simplicity]
-- **Issue**: Doesn't scale, needs replacement
+- ADK sessions are ephemeral conversation state (single request/response cycle)
+- Long-term memory is handled by OpenMemory
+- Simple implementation, no external dependencies
+- Sessions are lightweight and don't need persistence
 
 ### Why PostgreSQL Only?
 
@@ -539,45 +408,11 @@ Formatted results returned to agent
 - Row Level Security (RLS) support
 - Managed service reduces operational overhead
 
-## Future Architecture Considerations
-
-### Planned Features
-
-1. **Agent-to-Agent (A2A)**
-   - Multiple specialized agents
-   - Agent orchestration
-   - Currently disabled (`a2a=False`)
-
-2. **MCP Servers**
-   - Telegram MCP for group chats
-   - Twilio MCP for voice reminders
-
-3. **Admin Dashboard**
-   - User management
-   - Activity viewing
-   - System monitoring
-
-### Architecture Evolution
-
-**Current**: Monolithic FastAPI app with separate channel processes
-
-**Future Considerations**:
-- Microservices architecture (if team grows)
-- Event-driven architecture (for agent-to-agent)
-- Serverless functions (for specific tasks)
-
-**When to Consider**:
-- Team size > 8 developers
-- Need independent deployment schedules
-- Different scaling requirements per component
-- Technology diversity requirements
-
 ## Glossary
 
 - **ADK**: Agent Development Kit (Google framework)
-- **A2A**: Agent-to-Agent communication
 - **MCP**: Model Context Protocol
 - **RAG**: Retrieval-Augmented Generation
 - **NormalizedMessage**: Standard message format across channels
-- **ConversationContext**: Short-term conversation state (300s keep-alive)
-- **ADK Session**: ADK framework session (separate from conversation context)
+- **ADK Session**: Ephemeral conversation state for managing request/response cycles
+- **OpenMemory**: Long-term semantic memory storage with vector search

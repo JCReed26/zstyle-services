@@ -4,6 +4,8 @@ Credential Service
 Provides secure storage and retrieval of user credentials.
 Encrypts sensitive tokens while storing non-sensitive metadata unencrypted.
 
+Supports graceful degradation - returns None if database unavailable.
+
 USAGE EXAMPLE:
 ==============
 from services.credential_service import credential_service
@@ -25,13 +27,17 @@ creds = await credential_service.get_credentials(
     service="google"
 )
 """
+import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 
 from database.engine import AsyncSessionLocal
 from database.repositories import CredentialRepository
+from database.availability import is_database_available
 from app.security import encrypt_credential, decrypt_credential
+
+logger = logging.getLogger(__name__)
 
 
 class CredentialNotFoundError(Exception):
@@ -155,37 +161,48 @@ class CredentialService:
             session: Optional database session to use. If None, creates a new session.
                         
         Returns:
-            The created or updated Credential instance
+            The created or updated Credential instance, or None if database unavailable
             
         Raises:
+            RuntimeError: If database is not available
             ValueError: If credentials dict is missing required "token" key
         """
-        # Extract and encrypt sensitive data
-        extracted = self._extract_sensitive_data(credentials)
+        if not is_database_available():
+            logger.warning(f"Database unavailable - cannot store credentials for user {user_id}, service {service}")
+            raise RuntimeError("Database is not available - cannot store credentials")
         
-        async with self._get_session_context(session) as db:
-            repo = CredentialRepository(db)
+        try:
+            # Extract and encrypt sensitive data
+            extracted = self._extract_sensitive_data(credentials)
             
-            # Check if credential already exists
-            existing = await repo.get_by_user_and_type(user_id, service)
-            
-            if existing:
-                # Update existing credential
-                return await repo.update(
-                    existing.id,
-                    token_value=extracted["token_value"],
-                    refresh_token=extracted["refresh_token"],
-                    extra_data=extracted["extra_data"]
-                )
-            else:
-                # Create new credential
-                return await repo.create(
-                    user_id=user_id,
-                    credential_type=service,
-                    token_value=extracted["token_value"],
-                    refresh_token=extracted["refresh_token"],
-                    extra_data=extracted["extra_data"]
-                )
+            async with self._get_session_context(session) as db:
+                repo = CredentialRepository(db)
+                
+                # Check if credential already exists
+                existing = await repo.get_by_user_and_type(user_id, service)
+                
+                if existing:
+                    # Update existing credential
+                    return await repo.update(
+                        existing.id,
+                        token_value=extracted["token_value"],
+                        refresh_token=extracted["refresh_token"],
+                        extra_data=extracted["extra_data"]
+                    )
+                else:
+                    # Create new credential
+                    return await repo.create(
+                        user_id=user_id,
+                        credential_type=service,
+                        token_value=extracted["token_value"],
+                        refresh_token=extracted["refresh_token"],
+                        extra_data=extracted["extra_data"]
+                    )
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to store credentials: {e}", exc_info=True)
+            raise
     
     async def get_credentials(
         self,
@@ -196,22 +213,37 @@ class CredentialService:
         """
         Retrieve credentials for a user and service.
         
+        SECURITY: Validates user_id matches credential owner.
+        
         Args:
             user_id: The user's ID
             service: Service name
             session: Optional database session to use. If None, creates a new session.
             
         Returns:
-            Dictionary with decrypted credentials, or None if not found
+            Dictionary with decrypted credentials, or None if not found or database unavailable
         """
-        async with self._get_session_context(session) as db:
-            repo = CredentialRepository(db)
-            credential = await repo.get_by_user_and_type(user_id, service)
-            
-            if not credential:
-                return None
-            
-            return self._reconstruct_credentials(credential)
+        if not is_database_available():
+            logger.warning(f"Database unavailable - cannot retrieve credentials for user {user_id}, service {service}")
+            return None
+        
+        try:
+            async with self._get_session_context(session) as db:
+                repo = CredentialRepository(db)
+                credential = await repo.get_by_user_and_type(user_id, service)
+                
+                if not credential:
+                    return None
+                
+                # SECURITY: Verify user_id matches
+                if str(credential.user_id) != str(user_id):
+                    logger.error(f"CRITICAL: User ID mismatch for credential access")
+                    return None
+                
+                return self._reconstruct_credentials(credential)
+        except Exception as e:
+            logger.error(f"Failed to retrieve credentials: {e}", exc_info=True)
+            return None
     
     async def update_credentials(
         self,
@@ -285,3 +317,7 @@ class CredentialService:
                         f"Credential not found for user {user_id} and service {service}"
                     ) from e
                 raise
+
+
+            
+credential_service = CredentialService()

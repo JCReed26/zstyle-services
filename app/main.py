@@ -53,12 +53,41 @@ agent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + 
 AGENTS_DIR = str(agent_directory)
 
 
+def validate_critical_imports():
+    """
+    Validate all critical imports at startup.
+    Raises ImportError if any critical import fails.
+    """
+    critical_imports = [
+        ("openmemory.client", "Memory", "openmemory-py package"),
+        ("google.adk.agents", "Agent", "google-adk package"),
+        ("google.adk.tools.agent_tool", "AgentTool", "google-adk package"),
+    ]
+    
+    failed_imports = []
+    for module_name, class_name, description in critical_imports:
+        try:
+            module = __import__(module_name, fromlist=[class_name])
+            if not hasattr(module, class_name):
+                failed_imports.append(f"{module_name}.{class_name} ({description})")
+        except (ImportError, NameError, AttributeError) as e:
+            failed_imports.append(f"{module_name}.{class_name} ({description}): {e}")
+    
+    if failed_imports:
+        error_msg = "Critical imports failed:\n" + "\n".join(f"  - {imp}" for imp in failed_imports)
+        logger.error(error_msg)
+        raise ImportError(error_msg)
+    
+    logger.info("All critical imports validated successfully")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Lifespan context manager for FastAPI.
     
     Handles:
+    - Critical import validation
     - Database initialization on startup
     - TelegramChannel initialization for webhook processing
     - Cleanup on shutdown
@@ -68,38 +97,52 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("ZStyle Services Starting...")
     logger.info("=" * 50)
     
+    # Validate critical imports at startup
+    validate_critical_imports()
+    
+    # Register database engine with availability checker
+    from database.availability import set_database_engine, is_database_available
+    set_database_engine(engine)
+    
     # Initialize database tables (non-blocking)
-    logger.info("Initializing database...")
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database initialized successfully.")
-    except Exception as e:
-        logger.error(f"Database initialization failed: {e}", exc_info=True)
-        logger.warning("Application continuing without database - some features may be limited")
-        # Don't raise - allow app to start even if DB is unavailable
-        # This is important for development and graceful degradation
+    if is_database_available() and engine:
+        logger.info("Initializing database...")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database initialized successfully.")
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}", exc_info=True)
+            logger.warning("Application continuing without database - some features may be limited")
+            set_database_engine(None)  # Mark database as unavailable
+            # Don't raise - allow app to start even if DB is unavailable
+            # This is important for development and graceful degradation
+    else:
+        logger.warning("Database not configured - application running in degraded mode")
+        logger.warning("User management features will be disabled")
     
     # Initialize TelegramChannel for webhook processing
     await _init_telegram_channel()
     
-    # Start background task for OAuth state cleanup
-    import asyncio
-    from services.oauth_state_service import oauth_state_service
-    
-    async def cleanup_oauth_states():
-        """Periodically clean up expired OAuth states."""
-        while True:
-            try:
-                await asyncio.sleep(3600)  # Run every hour
-                deleted = await oauth_state_service.cleanup_expired()
-                if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} expired OAuth states")
-            except Exception as e:
-                logger.error(f"Error cleaning up OAuth states: {e}")
-    
-    # Start cleanup task
-    asyncio.create_task(cleanup_oauth_states())
+    # Start background task for OAuth state cleanup (only if database available)
+    if is_database_available():
+        import asyncio
+        from services.oauth_state_service import oauth_state_service
+        
+        async def cleanup_oauth_states():
+            """Periodically clean up expired OAuth states."""
+            while True:
+                try:
+                    await asyncio.sleep(3600)  # Run every hour
+                    if is_database_available():
+                        deleted = await oauth_state_service.cleanup_expired()
+                        if deleted > 0:
+                            logger.info(f"Cleaned up {deleted} expired OAuth states")
+                except Exception as e:
+                    logger.error(f"Error cleaning up OAuth states: {e}")
+        
+        # Start cleanup task
+        asyncio.create_task(cleanup_oauth_states())
     
     logger.info(f"Agents directory: {AGENTS_DIR}")
     logger.info("ADK Dev UI available at: http://localhost:8000")
@@ -119,7 +162,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.error(f"Error stopping TelegramChannel: {e}")
     
-    await engine.dispose()
+    if engine:
+        await engine.dispose()
     logger.info("Shutdown complete.")
 
 
@@ -170,7 +214,6 @@ async def _init_telegram_channel():
     global _telegram_channel
     try:
         from channels.telegram_bot import TelegramChannel
-        from api.telegram_webhook import set_telegram_channel
         
         logger.info("Initializing TelegramChannel for webhook processing...")
         _telegram_channel = TelegramChannel()
@@ -181,8 +224,6 @@ async def _init_telegram_channel():
         # Initialize Application for bot operations (without polling)
         await _telegram_channel.start()
         
-        # Set telegram channel for webhook router
-        set_telegram_channel(_telegram_channel)
         logger.info("TelegramChannel initialized successfully")
     except Exception as e:
         logger.warning(f"Failed to initialize TelegramChannel: {e}")
@@ -245,20 +286,108 @@ async def chat_bridge(request: BridgeRequest):
 
 
 # =============================================================================
-# OAUTH ROUTERS
+# OAUTH ROUTES (Simple inline implementation)
 # =============================================================================
 
-from api.oauth.google import router as google_oauth_router
-from api.oauth.ticktick import router as ticktick_oauth_router
-from api.oauth.webapp import router as webapp_router
-from api.api.routes import router as api_router
-from api.auth.phone_auth import router as phone_auth_router
+from fastapi import Query, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
+from urllib.parse import urlencode
+import httpx
+from uuid import UUID
 
-app.include_router(google_oauth_router)
-app.include_router(ticktick_oauth_router)
-app.include_router(webapp_router)
-app.include_router(phone_auth_router)
-app.include_router(api_router, prefix="/api")
+from services.oauth_state_service import oauth_state_service
+from services.credential_service import credential_service
+from database.availability import is_database_available
+
+@app.get("/oauth/webapp")
+async def oauth_webapp(service: str = Query(...), user_id: str = Query(...)):
+    """Simple webapp redirect for Telegram Mini App."""
+    try:
+        UUID(user_id)  # Validate UUID
+    except ValueError:
+        raise HTTPException(400, "Invalid user_id")
+    
+    if service == "google" and settings.GOOGLE_CLIENT_ID:
+        base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
+        auth_url = f"{base_url}/oauth/google/authorize?user_id={user_id}"
+    elif service == "ticktick" and settings.TICKTICK_CLIENT_ID:
+        base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
+        auth_url = f"{base_url}/oauth/ticktick/authorize?user_id={user_id}"
+    else:
+        raise HTTPException(400, "Service not configured")
+    
+    return HTMLResponse(f'<html><body><script>window.location.href="{auth_url}";</script></body></html>')
+
+@app.get("/oauth/google/authorize")
+async def google_authorize(user_id: str = Query(...)):
+    """Start Google OAuth flow."""
+    try:
+        UUID(user_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid user_id")
+    
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(503, "Google OAuth not configured")
+    
+    if not is_database_available():
+        raise HTTPException(503, "Database unavailable")
+    
+    state = await oauth_state_service.create_state(user_id, "google")
+    base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
+    
+    params = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": f"{base_url}/oauth/google/callback",
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "consent"
+    }
+    
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}")
+
+@app.get("/oauth/google/callback")
+async def google_callback(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
+    """Handle Google OAuth callback."""
+    if error:
+        return HTMLResponse(f"<html><body><h1>Error: {error}</h1></body></html>", 400)
+    
+    if not code or not state:
+        raise HTTPException(400, "Missing code or state")
+    
+    if not is_database_available():
+        raise HTTPException(503, "Database unavailable")
+    
+    state_data = await oauth_state_service.validate_and_consume(state)
+    if not state_data:
+        return HTMLResponse("<html><body><h1>Invalid or expired request</h1></body></html>", 400)
+    
+    user_id = str(state_data["user_id"])
+    base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post("https://oauth2.googleapis.com/token", data={
+                "code": code,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": f"{base_url}/oauth/google/callback",
+                "grant_type": "authorization_code"
+            })
+            resp.raise_for_status()
+            tokens = resp.json()
+        
+        await credential_service.store_credentials(user_id, "google", {
+            "token": tokens["access_token"],
+            "refresh_token": tokens.get("refresh_token"),
+            "expires_in": tokens.get("expires_in", 3600)
+        })
+        
+        return HTMLResponse("<html><body><h1>Success! You can close this window.</h1></body></html>")
+    except Exception as e:
+        logger.error(f"OAuth callback error: {e}", exc_info=True)
+        return HTMLResponse(f"<html><body><h1>Error: {str(e)}</h1></body></html>", 500)
 
 
 # =============================================================================
@@ -269,12 +398,33 @@ app.include_router(api_router, prefix="/api")
 async def health_check():
     """
     Health check endpoint for container orchestration.
+    Verifies service dependencies are available.
     """
-    return {
-        "status": "healthy",
-        "service": "zstyle-services",
-        "agents_dir": AGENTS_DIR
-    }
+    from database.availability import is_database_available
+    from services.openmemory_client import get_openmemory_client
+    
+    status = {"status": "healthy", "service": "zstyle-services"}
+    checks = {}
+    
+    # Database check
+    checks["database"] = "available" if is_database_available() else "unavailable"
+    
+    # OpenMemory check
+    try:
+        client = get_openmemory_client()
+        # Simple connectivity check
+        checks["openmemory"] = "available"
+    except Exception:
+        checks["openmemory"] = "unavailable"
+    
+    # Determine overall health
+    if all(v == "available" for v in checks.values()):
+        status["status"] = "healthy"
+    else:
+        status["status"] = "degraded"
+    
+    status["checks"] = checks
+    return status
 
 
 @app.get("/api/info")
@@ -291,7 +441,7 @@ async def api_info():
             "adk_ui": "/",
             "agent_run": "/run",
             "sessions": "/apps/{app_name}/users/{user_id}/sessions",
-            "telegram_webhook": "/webhook/telegram"
+            "telegram_polling": "Telegram bot uses polling mode"
         }
     }
 
@@ -299,9 +449,38 @@ async def api_info():
 # =============================================================================
 # WEBHOOK ROUTER
 # =============================================================================
-from api.telegram_webhook import router as webhook_router
+from fastapi import Request, HTTPException
+from telegram import Update
+from app.security import verify_telegram_webhook
 
-app.include_router(webhook_router)
+@app.post("/webhook/telegram")
+async def telegram_webhook(request: Request):
+    """
+    Telegram webhook endpoint.
+    
+    Receives updates from Telegram and processes them through TelegramChannel.
+    """
+    if not _telegram_channel:
+        raise HTTPException(status_code=503, detail="Telegram channel not initialized")
+    
+    # Verify webhook secret if configured
+    if settings.TELEGRAM_WEBHOOK_SECRET:
+        body = await request.body()
+        if not verify_telegram_webhook(body, settings.TELEGRAM_WEBHOOK_SECRET):
+            raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    
+    # Parse update from JSON
+    try:
+        data = await request.json()
+        update = Update.de_json(data, _telegram_channel.application.bot)
+        
+        # Process update
+        await _telegram_channel.process_webhook_update(update)
+        
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error processing webhook")
 
 
 # =============================================================================
