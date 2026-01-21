@@ -30,9 +30,6 @@ sqlalchemy
 asyncpg
 psycopg2-binary
 
-# Supabase
-supabase
-
 # Authentication and security
 cryptography
 python-jose[cryptography]

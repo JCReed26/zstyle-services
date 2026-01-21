@@ -8,9 +8,9 @@ This document records architectural decisions made for the ZStyle Services proje
 
 **Status**: Accepted
 
-**Decision**: Use PostgreSQL (Supabase) for all environments with async SQLAlchemy.
+**Decision**: Use PostgreSQL (local Docker container) for all environments with async SQLAlchemy.
 
-**Rationale**: Production-ready, supports concurrent access, scalable, built-in auth via Supabase.
+**Rationale**: Production-ready, supports concurrent access, scalable, eliminates DNS resolution issues, simplifies deployment for local PC hosting.
 
 ---
 

@@ -36,7 +36,7 @@ ZStyle Services is an AI-powered Executive Function Coach system built on Google
         ▼           ▼           ▼
 ┌──────────┐  ┌──────────┐  ┌──────────┐
 │ Memory   │  │ Database │  │ Services │
-│(OpenMem) │  │(Supabase)│  │(Creds,   │
+│(OpenMem) │  │(Postgres)│  │(Creds,   │
 │          │  │          │  │ Auth)    │
 └──────────┘  └──────────┘  └──────────┘
 ```
@@ -219,7 +219,7 @@ Semantic search in OpenMemory → Formatted results returned to agent
 **User** (`database/models.py`)
 - Core user identity
 - Maps channel IDs (Telegram) to internal user IDs
-- Links to Supabase Auth users
+- User authentication via phone number
 
 **Credential** (`database/models.py`)
 - Encrypted OAuth tokens and API keys
@@ -239,9 +239,10 @@ Semantic search in OpenMemory → Formatted results returned to agent
 #### Database Engine
 
 **Current Setup**:
-- Production: PostgreSQL (Supabase) - required
+- Production: PostgreSQL (local Docker container) - required
 - Uses `DATABASE_URL` environment variable
 - Async SQLAlchemy with connection pooling
+- Docker service name `db` for internal DNS resolution
 
 **Repository Pattern**:
 - All database operations go through repositories (`database/repositories.py`)
@@ -335,10 +336,10 @@ Semantic search in OpenMemory → Formatted results returned to agent
 - `GOOGLE_API_KEY`: Gemini API key
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token
 - `SECRET_KEY`: Encryption key (32+ chars)
-- `DATABASE_URL`: PostgreSQL connection string (Supabase)
-- `SUPABASE_URL`: Supabase project URL
-- `SUPABASE_ANON_KEY`: Supabase anonymous key
-- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key
+- `DATABASE_URL`: PostgreSQL connection string (local container)
+- `POSTGRES_USER`: PostgreSQL username (default: postgres)
+- `POSTGRES_PASSWORD`: PostgreSQL password
+- `POSTGRES_DB`: PostgreSQL database name (default: zstyle_db)
 
 **Optional Variables**:
 - `OPENMEMORY_URL`: OpenMemory service URL (default: http://openmemory:8080)
@@ -362,7 +363,7 @@ Semantic search in OpenMemory → Formatted results returned to agent
 ### Infrastructure
 - **Docker**: Containerization
 - **Docker Compose**: Local development
-- **PostgreSQL**: Production database (Supabase)
+- **PostgreSQL**: Local database container with persistent volume
 
 ## Design Decisions
 
@@ -398,14 +399,15 @@ Semantic search in OpenMemory → Formatted results returned to agent
 
 ### Why PostgreSQL Only?
 
-**Decision**: Use PostgreSQL (Supabase) for all environments.
+**Decision**: Use PostgreSQL (local Docker container) for all environments.
 
 **Rationale**:
 - Production-ready from day one
 - Supports concurrent access
 - Scalable architecture
-- Built-in authentication via Supabase Auth
-- Row Level Security (RLS) support
+- Eliminates DNS resolution issues
+- Simplifies deployment for local PC hosting
+- Persistent data via Docker volumes
 - Managed service reduces operational overhead
 
 ## Glossary

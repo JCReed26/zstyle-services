@@ -24,7 +24,7 @@ ENVIRONMENT:
 ============
 Required:
     - GOOGLE_API_KEY: For Gemini models
-    - DATABASE_URL: PostgreSQL connection string (Supabase)
+    - DATABASE_URL: PostgreSQL connection string (local container)
 """
 import os
 import logging
@@ -32,7 +32,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from google.adk.cli.fast_api import get_fast_api_app
 from database.engine import engine, Base
@@ -51,6 +51,21 @@ logger = logging.getLogger(__name__)
 # Create agent directory path
 agent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/agent"
 AGENTS_DIR = str(agent_directory)
+
+
+def get_validated_oauth_base_url() -> str:
+    """
+    Get and validate OAUTH_BASE_URL from settings.
+    
+    Raises:
+        HTTPException: If OAUTH_BASE_URL is not set or not HTTPS
+    """
+    base_url = settings.OAUTH_BASE_URL
+    if not base_url:
+        raise HTTPException(503, "OAUTH_BASE_URL not configured. Set it in .env file.")
+    if not base_url.startswith("https://"):
+        raise HTTPException(503, "OAUTH_BASE_URL must be HTTPS. Use ngrok for development.")
+    return base_url.rstrip('/')
 
 
 def validate_critical_imports():
@@ -104,19 +119,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from database.availability import set_database_engine, is_database_available
     set_database_engine(engine)
     
-    # Initialize database tables (non-blocking)
+    # Verify database connection (schema should already exist via migration)
     if is_database_available() and engine:
-        logger.info("Initializing database...")
+        logger.info("Verifying database connection...")
         try:
+            from sqlalchemy import text
             async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database initialized successfully.")
+                await conn.execute(text("SELECT 1"))
+            logger.info("Database connection verified successfully.")
         except Exception as e:
-            logger.error(f"Database initialization failed: {e}", exc_info=True)
+            logger.error(f"Database connection failed: {e}", exc_info=True)
             logger.warning("Application continuing without database - some features may be limited")
             set_database_engine(None)  # Mark database as unavailable
-            # Don't raise - allow app to start even if DB is unavailable
-            # This is important for development and graceful degradation
     else:
         logger.warning("Database not configured - application running in degraded mode")
         logger.warning("User management features will be disabled")
@@ -289,7 +303,7 @@ async def chat_bridge(request: BridgeRequest):
 # OAUTH ROUTES (Simple inline implementation)
 # =============================================================================
 
-from fastapi import Query, HTTPException
+from fastapi import Query, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from urllib.parse import urlencode
 import httpx
@@ -301,22 +315,113 @@ from database.availability import is_database_available
 
 @app.get("/oauth/webapp")
 async def oauth_webapp(service: str = Query(...), user_id: str = Query(...)):
-    """Simple webapp redirect for Telegram Mini App."""
+    """
+    Webapp endpoint for Telegram Mini App OAuth flow.
+    
+    This endpoint serves an HTML page that:
+    1. Opens OAuth provider URL in external browser (not iframe)
+    2. Handles the callback and closes the webapp
+    """
     try:
         UUID(user_id)  # Validate UUID
     except ValueError:
         raise HTTPException(400, "Invalid user_id")
     
     if service == "google" and settings.GOOGLE_CLIENT_ID:
-        base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
+        base_url = get_validated_oauth_base_url()
         auth_url = f"{base_url}/oauth/google/authorize?user_id={user_id}"
     elif service == "ticktick" and settings.TICKTICK_CLIENT_ID:
-        base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
+        base_url = get_validated_oauth_base_url()
         auth_url = f"{base_url}/oauth/ticktick/authorize?user_id={user_id}"
     else:
         raise HTTPException(400, "Service not configured")
     
-    return HTMLResponse(f'<html><body><script>window.location.href="{auth_url}";</script></body></html>')
+    # Return HTML page that opens OAuth in external browser
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Authorizing {service.title()}...</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: var(--tg-theme-bg-color, #ffffff);
+                color: var(--tg-theme-text-color, #000000);
+            }}
+            .container {{
+                text-align: center;
+                padding: 20px;
+            }}
+            .spinner {{
+                border: 4px solid #f3f3f3;
+                border-top: 4px solid #0088cc;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 20px;
+            }}
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+            button {{
+                padding: 12px 24px;
+                background: var(--tg-theme-button-color, #0088cc);
+                color: var(--tg-theme-button-text-color, #ffffff);
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                cursor: pointer;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="spinner"></div>
+            <p>Opening {service.title()} authorization...</p>
+            <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                If the authorization page doesn't open automatically, click the button below.
+            </p>
+            <button onclick="openAuth()">Open Authorization Page</button>
+        </div>
+        <script>
+            // Expand webapp to full height
+            if (window.Telegram && window.Telegram.WebApp) {{
+                window.Telegram.WebApp.expand();
+            }}
+            
+            function openAuth() {{
+                const authUrl = "{auth_url}";
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    // Use Telegram's openLink to open in external browser
+                    window.Telegram.WebApp.openLink(authUrl);
+                }} else {{
+                    // Fallback for non-Telegram environments
+                    window.open(authUrl, '_blank');
+                }}
+            }}
+            
+            // Auto-open after a short delay
+            setTimeout(openAuth, 500);
+        </script>
+    </body>
+    </html>
+    """
+    response = HTMLResponse(html_content)
+    # Add CSP header for Telegram WebApp embedding
+    response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+    return response
 
 @app.get("/oauth/google/authorize")
 async def google_authorize(user_id: str = Query(...)):
@@ -333,8 +438,14 @@ async def google_authorize(user_id: str = Query(...)):
         raise HTTPException(503, "Database unavailable")
     
     state = await oauth_state_service.create_state(user_id, "google")
-    base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
-    
+    base_url = get_validated_oauth_base_url()
+    redirect_uri = f"{base_url}/oauth/google/callback"
+    logger.info(f"DEBUG Google redirect_uri: '{redirect_uri}'")  # Add this line
+    logger.info(f"DEBUG Google base_url: '{base_url}'")  # Add this line
+    logger.info(f"DEBUG Google state: '{state}'")  # Add this line
+    logger.info(f"DEBUG Google settings.GOOGLE_CLIENT_ID: '{settings.GOOGLE_CLIENT_ID}'")  # Add this line
+    logger.info(f"DEBUG Google settings.GOOGLE_CLIENT_SECRET: '{settings.GOOGLE_CLIENT_SECRET}'")  # Add this line
+
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": f"{base_url}/oauth/google/callback",
@@ -351,7 +462,30 @@ async def google_authorize(user_id: str = Query(...)):
 async def google_callback(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
     """Handle Google OAuth callback."""
     if error:
-        return HTMLResponse(f"<html><body><h1>Error: {error}</h1></body></html>", 400)
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Authorization Error</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 20px;">
+            <h1>Authorization Failed</h1>
+            <p>Error: {}</p>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    setTimeout(() => window.Telegram.WebApp.close(), 3000);
+                }}
+            </script>
+        </body>
+        </html>
+        """.format(error)
+        response = HTMLResponse(html, 400)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
     
     if not code or not state:
         raise HTTPException(400, "Missing code or state")
@@ -361,10 +495,32 @@ async def google_callback(code: str = Query(None), state: str = Query(None), err
     
     state_data = await oauth_state_service.validate_and_consume(state)
     if not state_data:
-        return HTMLResponse("<html><body><h1>Invalid or expired request</h1></body></html>", 400)
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Invalid Request</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 20px;">
+            <h1>Invalid or Expired Request</h1>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    setTimeout(() => window.Telegram.WebApp.close(), 3000);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(html, 400)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
     
     user_id = str(state_data["user_id"])
-    base_url = settings.OAUTH_BASE_URL or f"http://localhost:{settings.PORT}"
+    base_url = get_validated_oauth_base_url()
     
     try:
         async with httpx.AsyncClient() as client:
@@ -378,16 +534,500 @@ async def google_callback(code: str = Query(None), state: str = Query(None), err
             resp.raise_for_status()
             tokens = resp.json()
         
+        # Store credentials with expires_at calculation (handled by credential_service)
         await credential_service.store_credentials(user_id, "google", {
             "token": tokens["access_token"],
             "refresh_token": tokens.get("refresh_token"),
             "expires_in": tokens.get("expires_in", 3600)
         })
         
-        return HTMLResponse("<html><body><h1>Success! You can close this window.</h1></body></html>")
+        # Success page that closes the webapp
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Authorization Successful</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background: var(--tg-theme-bg-color, #ffffff);
+                    color: var(--tg-theme-text-color, #000000);
+                    text-align: center;
+                    padding: 20px;
+                }}
+                .success {{
+                    color: #4caf50;
+                    font-size: 48px;
+                    margin-bottom: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div>
+                <div class="success">✓</div>
+                <h1>Authorization Successful!</h1>
+                <p>You can close this window.</p>
+            </div>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    // Close the webapp after 2 seconds
+                    setTimeout(() => {{
+                        window.Telegram.WebApp.close();
+                    }}, 2000);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(html)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
     except Exception as e:
         logger.error(f"OAuth callback error: {e}", exc_info=True)
-        return HTMLResponse(f"<html><body><h1>Error: {str(e)}</h1></body></html>", 500)
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Error</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 20px;">
+            <h1>Error</h1>
+            <p>{str(e)}</p>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    setTimeout(() => window.Telegram.WebApp.close(), 3000);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(html, 500)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
+
+
+# =============================================================================
+# TICKTICK OAUTH ROUTES
+# =============================================================================
+
+@app.get("/oauth/ticktick/authorize")
+async def ticktick_authorize(user_id: str = Query(...)):
+    """Start TickTick OAuth flow."""
+    try:
+        UUID(user_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid user_id")
+    
+    if not settings.TICKTICK_CLIENT_ID:
+        raise HTTPException(503, "TickTick OAuth not configured")
+    
+    if not is_database_available():
+        raise HTTPException(503, "Database unavailable")
+    
+    state = await oauth_state_service.create_state(user_id, "ticktick")
+    base_url = get_validated_oauth_base_url()
+    redirect_uri = f"{base_url}/oauth/ticktick/callback"
+    
+    # TickTick OAuth 2.0 authorization URL
+    # Documentation: https://developer.ticktick.com/api#oauth
+    params = {
+        "client_id": settings.TICKTICK_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "tasks:write tasks:read",
+        "state": state,
+    }
+    
+    auth_url = f"https://ticktick.com/oauth/authorize?{urlencode(params)}"
+    return RedirectResponse(auth_url)
+
+@app.get("/oauth/ticktick/callback")
+async def ticktick_callback(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
+    """Handle TickTick OAuth callback."""
+    if error:
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Authorization Error</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 20px;">
+            <h1>Authorization Failed</h1>
+            <p>Error: {}</p>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    setTimeout(() => window.Telegram.WebApp.close(), 3000);
+                }}
+            </script>
+        </body>
+        </html>
+        """.format(error)
+        response = HTMLResponse(html, 400)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
+    
+    if not code or not state:
+        raise HTTPException(400, "Missing code or state")
+    
+    if not is_database_available():
+        raise HTTPException(503, "Database unavailable")
+    
+    state_data = await oauth_state_service.validate_and_consume(state)
+    if not state_data:
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Invalid Request</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 20px;">
+            <h1>Invalid or Expired Request</h1>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    setTimeout(() => window.Telegram.WebApp.close(), 3000);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(html, 400)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
+    
+    user_id = str(state_data["user_id"])
+    
+    try:
+        base_url = get_validated_oauth_base_url()
+        redirect_uri = f"{base_url}/oauth/ticktick/callback"
+        
+        # Exchange authorization code for access token
+        token_url = "https://ticktick.com/oauth/token"
+        token_data = {
+            "client_id": settings.TICKTICK_CLIENT_ID,
+            "client_secret": settings.TICKTICK_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+        }
+        
+        async with httpx.AsyncClient() as client:
+            token_response = await client.post(token_url, data=token_data)
+            token_response.raise_for_status()
+            tokens = token_response.json()
+        
+        # Store credentials
+        await credential_service.store_credentials(user_id, "ticktick", {
+            "token": tokens.get("access_token"),
+            "refresh_token": tokens.get("refresh_token"),
+            "token_type": tokens.get("token_type", "Bearer"),
+            "expires_in": tokens.get("expires_in", 3600),
+        })
+        
+        # Send confirmation message to user via Telegram
+        try:
+            from database.repositories import UserRepository
+            from database.engine import AsyncSessionLocal
+            
+            async with AsyncSessionLocal() as db:
+                repo = UserRepository(db)
+                user = await repo.get_by_id(user_id)
+                
+                if user and user.telegram_id and _telegram_channel:
+                    confirmation_message = (
+                        "✅ TickTick authorization successful!\n\n"
+                        "Your TickTick account has been connected. "
+                        "You can now use TickTick features like:\n"
+                        "• View your tasks\n"
+                        "• Create new tasks\n"
+                        "• Update task status\n"
+                        "• Manage your projects"
+                    )
+                    
+                    await _telegram_channel.send_response(
+                        user_id=user_id,
+                        response=confirmation_message,
+                        channel_user_id=str(user.telegram_id)
+                    )
+                    logger.info(f"Sent TickTick authorization confirmation to user {user_id} (Telegram: {user.telegram_id})")
+                elif not user:
+                    logger.warning(f"User {user_id} not found - cannot send confirmation message")
+                elif not user.telegram_id:
+                    logger.warning(f"User {user_id} has no Telegram ID - cannot send confirmation message")
+                elif not _telegram_channel:
+                    logger.warning("Telegram channel not initialized - cannot send confirmation message")
+        except Exception as e:
+            # Don't fail the OAuth flow if sending message fails
+            logger.error(f"Failed to send TickTick authorization confirmation message: {e}", exc_info=True)
+        
+        # Success page that closes the webapp
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Authorization Successful</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background: var(--tg-theme-bg-color, #ffffff);
+                    color: var(--tg-theme-text-color, #000000);
+                    text-align: center;
+                    padding: 20px;
+                }}
+                .success {{
+                    color: #4caf50;
+                    font-size: 48px;
+                    margin-bottom: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div>
+                <div class="success">✓</div>
+                <h1>Authorization Successful!</h1>
+                <p>You can close this window.</p>
+            </div>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    // Close the webapp after 2 seconds
+                    setTimeout(() => {{
+                        window.Telegram.WebApp.close();
+                    }}, 2000);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(html)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
+        
+    except httpx.HTTPStatusError as e:
+        logger.error(f"TickTick token exchange failed: {e.response.status_code} - {e.response.text}", exc_info=True)
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Authorization Error</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 20px;">
+            <h1>Authorization Failed</h1>
+            <p>Error: {e.response.status_code}</p>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    setTimeout(() => window.Telegram.WebApp.close(), 3000);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(html, 500)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
+    except Exception as e:
+        logger.error(f"TickTick OAuth callback error: {e}", exc_info=True)
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Authorization Error</title>
+            <script src="https://telegram.org/js/telegram-web-app.js"></script>
+            <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://web.telegram.org https://*.web.telegram.org;">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 20px;">
+            <h1>Authorization Failed</h1>
+            <p>An error occurred: {str(e)}</p>
+            <script>
+                if (window.Telegram && window.Telegram.WebApp) {{
+                    setTimeout(() => window.Telegram.WebApp.close(), 3000);
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(html, 500)
+        response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+        return response
+
+
+# =============================================================================
+# PHONE AUTH WEB APP
+# =============================================================================
+
+@app.get("/auth/phone")
+async def phone_auth_webapp(telegram_id: str = Query(...)):
+    """
+    Web app for phone number authentication (simplified - no OTP).
+    Note: Primary authentication flow is via Telegram contact sharing.
+    """
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Phone Authentication</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                padding: 20px;
+                background: var(--tg-theme-bg-color, #ffffff);
+                color: var(--tg-theme-text-color, #000000);
+            }}
+            .container {{
+                max-width: 400px;
+                margin: 0 auto;
+            }}
+            input {{
+                width: 100%;
+                padding: 12px;
+                margin: 10px 0;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                font-size: 16px;
+                box-sizing: border-box;
+            }}
+            button {{
+                width: 100%;
+                padding: 12px;
+                margin: 10px 0;
+                background: var(--tg-theme-button-color, #0088cc);
+                color: var(--tg-theme-button-text-color, #ffffff);
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                cursor: pointer;
+            }}
+            .error {{
+                color: #ff3333;
+                margin: 10px 0;
+            }}
+            .success {{
+                color: #4caf50;
+                margin: 10px 0;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Phone Authentication</h1>
+            <div id="phoneStep">
+                <p>Enter your phone number (E.164 format, e.g., +1234567890):</p>
+                <input type="tel" id="phoneNumber" placeholder="+1234567890" />
+                <button onclick="createUser()">Create Account</button>
+                <div id="phoneError" class="error"></div>
+            </div>
+            <div id="successStep" style="display: none;">
+                <div class="success">✓ Authentication successful!</div>
+                <p>You can close this window.</p>
+            </div>
+        </div>
+        <script>
+            if (window.Telegram && window.Telegram.WebApp) {{
+                window.Telegram.WebApp.expand();
+            }}
+            
+            const telegramId = '{telegram_id}';
+            
+            async function createUser() {{
+                const phoneNumber = document.getElementById('phoneNumber').value.trim();
+                if (!phoneNumber) {{
+                    document.getElementById('phoneError').textContent = 'Please enter your phone number';
+                    return;
+                }}
+                
+                const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : '+' + phoneNumber;
+                
+                try {{
+                    const response = await fetch('/api/auth/phone/create', {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{
+                            phone_number: formattedPhone,
+                            telegram_id: telegramId
+                        }})
+                    }});
+                    
+                    const data = await response.json();
+                    if (data.success) {{
+                        document.getElementById('phoneStep').style.display = 'none';
+                        document.getElementById('successStep').style.display = 'block';
+                        if (window.Telegram && window.Telegram.WebApp) {{
+                            setTimeout(() => window.Telegram.WebApp.close(), 2000);
+                        }}
+                    }} else {{
+                        document.getElementById('phoneError').textContent = data.error || 'Failed to create account';
+                    }}
+                }} catch (e) {{
+                    document.getElementById('phoneError').textContent = 'Error: ' + e.message;
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    response = HTMLResponse(html_content)
+    response.headers["Content-Security-Policy"] = "frame-ancestors https://web.telegram.org https://*.web.telegram.org;"
+    return response
+
+@app.post("/api/auth/phone/create")
+async def create_user_api(request: Request):
+    """API endpoint to create user with phone number and Telegram ID."""
+    from services.auth_service import auth_service
+    data = await request.json()
+    phone_number = data.get('phone_number')
+    telegram_id = data.get('telegram_id')
+    telegram_username = data.get('telegram_username')
+    
+    try:
+        if not telegram_id:
+            return {"success": False, "error": "telegram_id is required"}
+        
+        result = await auth_service.create_user_with_phone(
+            phone_number=phone_number,
+            telegram_id=int(telegram_id),
+            telegram_username=telegram_username
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Failed to create user: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 # =============================================================================
@@ -449,7 +1089,6 @@ async def api_info():
 # =============================================================================
 # WEBHOOK ROUTER
 # =============================================================================
-from fastapi import Request, HTTPException
 from telegram import Update
 from app.security import verify_telegram_webhook
 

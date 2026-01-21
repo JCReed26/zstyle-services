@@ -55,8 +55,7 @@ class User(Base):
     """
     Core user profile entity for ZStyle.
     
-    The id field directly references auth.users(id) from Supabase Auth.
-    Phone number is stored in auth.users.phone, not here.
+    Uses UUID as primary key. Phone numbers can be stored in other_ids JSONB field.
     
     Each user can have multiple channel identities (Telegram ID, Discord ID, etc.)
     stored in telegram_id and other_ids JSONB field.
@@ -65,8 +64,8 @@ class User(Base):
     """
     __tablename__ = "users"
 
-    # Primary key references auth.users(id) directly
-    id = Column(UUID(as_uuid=True), ForeignKey("auth.users.id", ondelete="CASCADE"), primary_key=True)
+    # Primary key (UUID generated locally)
+    id = Column(UUID(as_uuid=True), primary_key=True)
     
     # Channel-specific identifiers
     telegram_id = Column(BigInteger, unique=True, nullable=True, index=True)

@@ -10,8 +10,8 @@ ZStyle Services is an AI-powered Executive Function Coach system built on Google
 
 ### Prerequisites
 
+- Docker and Docker Compose
 - Python 3.10+
-- Supabase project (for database and authentication)
 - Google API key (for Gemini models)
 - Telegram bot token (for Telegram integration)
 
@@ -27,15 +27,15 @@ ZStyle Services is an AI-powered Executive Function Coach system built on Google
    - `GOOGLE_API_KEY` - Google API key for Gemini models
    - `TELEGRAM_BOT_TOKEN` - Telegram bot token
    - `SECRET_KEY` - Secret key for encryption (32+ characters)
-   - `DATABASE_URL` - PostgreSQL connection string (Supabase)
-   - `SUPABASE_URL` - Supabase project URL
-   - `SUPABASE_ANON_KEY` - Supabase anonymous key
-   - `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+   - `DATABASE_URL` - PostgreSQL connection string (local container)
+   - `POSTGRES_USER` - PostgreSQL username (default: postgres)
+   - `POSTGRES_PASSWORD` - PostgreSQL password
+   - `POSTGRES_DB` - PostgreSQL database name (default: zstyle_db)
 
-3. Initialize Supabase database:
-   - Create tables using Supabase Dashboard SQL Editor or migrations
-   - Configure Row Level Security (RLS) policies
-   - Set up authentication providers
+3. Initialize local PostgreSQL database:
+   - **Start PostgreSQL container**: `docker compose up -d db`
+   - **Run migration**: `docker compose cp docs/migrations/001_initial_schema.sql db:/tmp/` then `docker compose exec db psql -U postgres -d zstyle_db -f /tmp/001_initial_schema.sql`
+   - **Verify**: Application verifies connection on startup
 
 4. Install dependencies:
 
@@ -102,7 +102,7 @@ zstyle-services/
 
 - `/services/memory/` - Long-term memory storage & RAG (No sessions just users and memory)
 - `/services/activity_log.py` - Activity logging service
-- `/services/auth_service.py` - Authentication service (Supabase Auth)
+- `/services/auth_service.py` - Authentication service
 - `/services/credential_service.py` - Secure credential storage
 
 #### API
@@ -160,10 +160,10 @@ Run tests with:
 make test
 ```
 
-For integration tests against Supabase:
+For integration tests against local PostgreSQL:
 
 ```bash
-export TEST_DATABASE_URL="postgresql+asyncpg://postgres:password@db.xxx.supabase.co:5432/postgres"
+export TEST_DATABASE_URL="postgresql+asyncpg://postgres:password@localhost:5432/zstyle_db"
 make test-integration
 ```
 

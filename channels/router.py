@@ -26,6 +26,8 @@ from google.genai import types
 from .base import NormalizedMessage, MessageType
 from services.activity_log import activity_log_service
 from database.models import ActivityLogSource
+# Import context variable to set user_id for tools
+from agent.exec_func_coach.ticktool import _current_user_id
 
 
 logger = logging.getLogger(__name__)
@@ -88,7 +90,7 @@ class MessageRouter:
         
         try:
             # 1. Log the incoming message
-            await self._log_activity(message)
+            # await self._log_activity(message)
             
             # 2. Get or create ADK session
             session_id = await self._ensure_session(user_id)
@@ -101,12 +103,12 @@ class MessageRouter:
             response_text = await self._run_agent(user_id, session_id, adk_content)
             
             # 5. Log the response
-            await activity_log_service.log(
-                user_id=user_id,
-                source=ActivityLogSource.SYSTEM,
-                action=f"agent responded to {message.channel} message",
-                extra_data={"response_length": len(response_text)}
-            )
+            # await activity_log_service.log(
+            #     user_id=user_id,
+            #     source=ActivityLogSource.SYSTEM,
+            #     action=f"agent responded to {message.channel} message",
+            #     extra_data={"response_length": len(response_text)}
+            # )
             
             return response_text
             
@@ -226,20 +228,48 @@ class MessageRouter:
         """
         Run the agent and collect the response.
         
+        Sets user_id in context variable (for backward compatibility) and ensures
+        user_id is available via ADK session/ToolContext for tools.
+        
         Returns the final text response from the agent.
         """
+        # Set user_id in context variable for backward compatibility during migration
+        # Save the token to properly reset context later
+        token = _current_user_id.set(user_id)
+        
+        # Try to store user_id in session state for ToolContext access
+        # Note: ADK sessions created with user_id parameter should make it available
+        # via tool_context.session.user_id, but we'll also try to store in state
+        try:
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id=user_id,
+                session_id=session_id
+            )
+            if session and hasattr(session, 'state'):
+                # Store user_id in session state for ToolContext access
+                session.state["user_id"] = user_id
+                logger.debug(f"Stored user_id in session state for session {session_id}")
+        except Exception as e:
+            # If we can't access session state, log but continue (contextvars fallback will work)
+            logger.debug(f"Could not store user_id in session state: {e}")
+        
         response_parts = []
         
-        async for event in self.runner.run_async(
-            user_id=user_id,
-            session_id=session_id,
-            new_message=content
-        ):
-            # Collect final response events
-            if event.is_final_response() and event.content:
-                for part in event.content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        response_parts.append(part.text)
+        try:
+            async for event in self.runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                new_message=content
+            ):
+                # Collect final response events
+                if event.is_final_response() and event.content:
+                    for part in event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            response_parts.append(part.text)
+        finally:
+            # Reset context using the saved token (proper contextvars pattern)
+            _current_user_id.reset(token)
         
         return "".join(response_parts) if response_parts else "I don't have a response for that."
     

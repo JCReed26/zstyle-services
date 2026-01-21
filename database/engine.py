@@ -2,7 +2,7 @@
 ZStyle Database Engine Configuration
 
 This module provides the SQLAlchemy async engine setup for the ZStyle system.
-Requires PostgreSQL connection (Supabase). SQLite is not supported.
+Requires PostgreSQL connection. SQLite is not supported.
 
 Supports graceful degradation when DATABASE_URL is not set or database is unavailable.
 
@@ -131,3 +131,23 @@ async def get_db_session():
     
     async with AsyncSessionLocal() as session:
         yield session
+
+
+async def verify_database_connection() -> bool:
+    """
+    Verify database connection without creating schema.
+    
+    Returns:
+        True if connection successful, False otherwise
+    """
+    if not engine:
+        return False
+    
+    try:
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        return True
+    except Exception as e:
+        logger.error(f"Database connection verification failed: {e}")
+        return False

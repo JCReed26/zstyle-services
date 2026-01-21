@@ -18,9 +18,6 @@ class Settings(BaseSettings):
         - TELEGRAM_BOT_TOKEN: Telegram bot token
         - SECRET_KEY: Secret key for encryption (must be 32+ characters)
         - DATABASE_URL: PostgreSQL connection string (required, no SQLite support)
-        - SUPABASE_URL: Supabase project URL (e.g., "https://xxx.supabase.co")
-        - SUPABASE_ANON_KEY: Supabase anonymous key for client operations
-        - SUPABASE_SERVICE_ROLE_KEY: Supabase service role key (admin operations, bypasses RLS)
     
     Optional variables with defaults:
         - PORT: Server port (default: 8000)
@@ -34,12 +31,6 @@ class Settings(BaseSettings):
         - GOOGLE_CLIENT_ID: Google OAuth client ID (default: None)
         - GOOGLE_CLIENT_SECRET: Google OAuth client secret (default: None)
         - OAUTH_BASE_URL: Base URL for OAuth redirects (default: None)
-    
-    OTP Configuration (configured in Supabase Dashboard):
-        - OTP expiration: 60 seconds
-        - Rate limit: 1 per minute per phone number
-        - OTP length: 6 digits
-        - No retry limit (user must wait for rate limit)
     """
     
     # Required fields
@@ -48,10 +39,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     DATABASE_URL: str  # PostgreSQL connection string (required)
                        # Format: postgresql://user:password@host:port/database
-                       # Example: postgresql://postgres:password@db.xxx.supabase.co:5432/postgres
-    SUPABASE_URL: str  # Supabase project URL (e.g., "https://xxx.supabase.co")
-    SUPABASE_ANON_KEY: str  # Supabase anonymous key for client operations
-    SUPABASE_SERVICE_ROLE_KEY: str  # Supabase service role key (admin operations, bypasses RLS)
+                       # Example: postgresql://postgres:password@db:5432/zstyle_db
     
     # Optional fields with defaults
     PORT: int = 8000
@@ -93,22 +81,21 @@ class Settings(BaseSettings):
             )
         return v
     
-    @field_validator("SUPABASE_URL")
+    @field_validator("OAUTH_BASE_URL")
     @classmethod
-    def validate_supabase_url(cls, v: str) -> str:
-        """Validate that SUPABASE_URL is set."""
-        if not v:
-            raise ValueError("SUPABASE_URL is required")
-        if not v.startswith("https://"):
-            raise ValueError("SUPABASE_URL must start with https://")
-        return v
-    
-    @field_validator("SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY")
-    @classmethod
-    def validate_supabase_keys(cls, v: str) -> str:
-        """Validate that Supabase keys are set."""
-        if not v:
-            raise ValueError("Supabase keys are required")
+    def validate_oauth_base_url(cls, v: Optional[str]) -> Optional[str]:
+        """
+        Validate that OAUTH_BASE_URL is HTTPS if provided.
+        
+        Telegram Mini Apps require HTTPS. For development, use ngrok.
+        """
+        if v:
+            v = v.strip().rstrip('/')
+            if not v.startswith("https://"):
+                raise ValueError(
+                    "OAUTH_BASE_URL must be HTTPS. "
+                    "For development, use ngrok: https://your-domain.ngrok.io"
+                )
         return v
     
     def has_database(self) -> bool:
@@ -116,18 +103,11 @@ class Settings(BaseSettings):
         Check if database configuration is present and valid.
         
         Returns:
-            True if all required database config is present, False otherwise
+            True if DATABASE_URL is set and valid, False otherwise
         """
         try:
-            # Check if all required database fields are set and non-empty
-            return bool(
-                self.DATABASE_URL and
-                self.SUPABASE_URL and
-                self.SUPABASE_ANON_KEY and
-                self.SUPABASE_SERVICE_ROLE_KEY
-            )
+            return bool(self.DATABASE_URL)
         except Exception:
-            # If any field is missing or invalid, return False
             return False
 
 

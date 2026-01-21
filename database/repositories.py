@@ -68,12 +68,12 @@ class UserRepository:
     
     async def get_by_auth_uid(self, auth_uid: Union[UUID, str]) -> Optional[User]:
         """
-        Retrieve a user by their Supabase Auth user ID.
+        Retrieve a user by their user ID.
         
-        This is an alias for get_by_id since id directly references auth.users(id).
+        This is an alias for get_by_id.
         
         Args:
-            auth_uid: The user's Supabase Auth UUID
+            auth_uid: The user's UUID
             
         Returns:
             User instance if found, None otherwise
@@ -187,7 +187,6 @@ class UserRepository:
         Delete a user profile (hard delete).
         
         Note: This will cascade delete related records due to foreign key constraints.
-        The auth.users record should be deleted via Supabase Auth.
         
         Args:
             user_id: The user's UUID (from auth.users.id)

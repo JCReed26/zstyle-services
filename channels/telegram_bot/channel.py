@@ -33,7 +33,7 @@ from datetime import datetime
 import uuid
 import httpx
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -108,6 +108,9 @@ class TelegramChannel(ConversationalChannel):
         await self.application.initialize()
         await self.application.start()
         
+        # Register bot commands so they appear in the menu
+        await self._register_commands()
+        
         # For polling mode, call: await self.application.updater.start_polling()
         
         logger.info("Telegram channel started successfully")
@@ -124,6 +127,19 @@ class TelegramChannel(ConversationalChannel):
             await self.application.shutdown()
         
         logger.info("Telegram channel stopped")
+    
+    async def _register_commands(self) -> None:
+        """Register bot commands with Telegram so they appear in the menu."""
+        commands = [
+            BotCommand("start", "Start the bot and authenticate"),
+            BotCommand("help", "Show help and available commands"),
+            BotCommand("authorize", "Authorize services (Google, TickTick)")
+        ]
+        try:
+            await self.application.bot.set_my_commands(commands)
+            logger.info("Bot commands registered successfully")
+        except Exception as e:
+            logger.error(f"Failed to register bot commands: {e}", exc_info=True)
     
     async def send_response(
         self,
@@ -172,10 +188,13 @@ class TelegramChannel(ConversationalChannel):
         """
         # Command handlers
         self.application.add_handler(CommandHandler('start', self._cmd_start))
-        self.application.add_handler(CommandHandler('newchat', self._cmd_newchat))
         self.application.add_handler(CommandHandler('help', self._cmd_help))
-        self.application.add_handler(CommandHandler('logs', self._cmd_logs))
         self.application.add_handler(CommandHandler('authorize', self._cmd_authorize))
+        
+        # Contact handler (for phone number sharing)
+        self.application.add_handler(
+            MessageHandler(filters.CONTACT, self._handle_contact)
+        )
         
         # Message handlers (order matters - more specific first)
         self.application.add_handler(
@@ -201,44 +220,34 @@ class TelegramChannel(ConversationalChannel):
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Handle /start command.
-        Welcomes user and resets conversation context.
+        Checks if user exists, if not prompts for phone number sharing.
         """
         telegram_id, username, phone_number = self._extract_telegram_user_info(update)
+        chat_id = update.effective_chat.id
         
-        # Clear conversation context
-        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
-        self.clear_context(user_id)
+        # Check if user exists
+        user_exists = await self._check_user_exists(telegram_id)
         
-        welcome = (
-            "Hello! I'm your AI Executive Function Coach.\n\n"
-            "I can help you:\n"
-            "- Manage your goals and tasks\n"
-            "- Organize your schedule\n"
-            "- Track habits and progress\n"
-            "- Access your Second Brain\n\n"
-            "Just send me a message to get started!\n\n"
-            "Commands:\n"
-            "/newchat - Start fresh conversation\n"
-            "/logs - View recent activity\n"
-            "/help - Show this message"
-        )
-        await update.message.reply_text(welcome)
-    
-    async def _cmd_newchat(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """
-        Handle /newchat command.
-        Clears conversation context for a fresh start.
-        """
-        telegram_id, username, phone_number = self._extract_telegram_user_info(update)
-        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
-        
-        # Clear both channel context and router session
-        self.clear_context(user_id)
-        
-        await update.message.reply_text(
-            "Conversation cleared! Starting fresh.\n"
-            "What would you like to work on?"
-        )
+        if user_exists:
+            # User exists - welcome them
+            user_id = await self._get_or_create_user(telegram_id, username, phone_number)
+            self.clear_context(user_id)
+            
+            welcome = (
+                "Hello! I'm your AI Executive Function Coach.\n\n"
+                "I can help you:\n"
+                "- Manage your goals and tasks\n"
+                "- Organize your schedule\n"
+                "- Track habits and progress\n"
+                "- Access your Second Brain\n\n"
+                "Just send me a message to get started!\n\n"
+                "Commands:\n"
+                "/help - Show help message"
+            )
+            await update.message.reply_text(welcome)
+        else:
+            # User doesn't exist - prompt for authentication
+            await self._prompt_phone_auth(update, context)
     
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
@@ -248,9 +257,7 @@ class TelegramChannel(ConversationalChannel):
         help_text = (
             "**ZStyle Executive Function Coach**\n\n"
             "**Commands:**\n"
-            "/start - Reset and show welcome\n"
-            "/newchat - Clear conversation context\n"
-            "/logs - View your last 25 activity logs\n"
+            "/start - Start the bot and authenticate\n"
             "/help - Show this message\n\n"
             "**I can help with:**\n"
             "- Goal setting and tracking\n"
@@ -262,43 +269,44 @@ class TelegramChannel(ConversationalChannel):
         )
         await update.message.reply_markdown(help_text)
     
-    async def _cmd_logs(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """
-        Handle /logs command.
-        Shows user's recent activity logs.
-        """
-        from services.activity_log import activity_log_service
-        
-        telegram_id, username, phone_number = self._extract_telegram_user_info(update)
-        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
-        
-        logs = await activity_log_service.get_recent(user_id, limit=25)
-        
-        if not logs:
-            await update.message.reply_text("No activity logs found.")
-            return
-        
-        formatted = activity_log_service.format_logs_for_display(logs)
-        
-        # Split if too long for Telegram (4096 char limit)
-        if len(formatted) > 4000:
-            formatted = formatted[:4000] + "\n... (truncated)"
-        
-        await update.message.reply_text(f"**Recent Activity:**\n\n```\n{formatted}\n```", parse_mode="Markdown")
-    
     async def _cmd_authorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Handle /authorize command.
         Shows Web App button for OAuth authorization.
         """
         telegram_id, username, phone_number = self._extract_telegram_user_info(update)
+        
+        # Verify user is properly authenticated (not using temporary UUID)
+        # Check if user_id looks like a temporary UUID (from _get_or_create_user fallback)
+        if not await self._check_user_exists(telegram_id):
+            await update.message.reply_text(
+                "❌ Please authenticate first using /start and share your phone number.\n\n"
+                "OAuth requires a verified user account."
+            )
+            return
+        
         user_id = await self._get_or_create_user(telegram_id, username, phone_number)
         
-        # Get base URL from environment or use localhost for development
-        import os
+        # Get base URL from settings with validation
         from app.config import settings
         
-        base_url = os.getenv("OAUTH_BASE_URL", f"http://localhost:{settings.PORT}")
+        base_url = settings.OAUTH_BASE_URL
+        if not base_url:
+            await update.message.reply_text(
+                "❌ OAuth is not configured. Please set OAUTH_BASE_URL in your .env file.\n\n"
+                "For development with ngrok:\n"
+                "1. Start ngrok: make ngrok-start\n"
+                "2. Restart the application to load the new URL"
+            )
+            return
+        
+        if not base_url.startswith("https://"):
+            await update.message.reply_text(
+                "❌ OAUTH_BASE_URL must be HTTPS. Telegram Mini Apps require secure connections.\n\n"
+                f"Current value: {base_url}"
+            )
+            return
+        
         base_url = base_url.rstrip('/')
         
         # Create Web App buttons for available services
@@ -342,6 +350,11 @@ class TelegramChannel(ConversationalChannel):
     # MESSAGE HANDLERS
     # =========================================================================
     
+    # TODO: Implement the text cleaning functionality and add step to send_response
+    def _clean_text(self, text: str) -> str:
+        """Cleans markdown syntax from ADK and manipulates to Telegram"""
+        pass
+
     async def _handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Handle incoming text messages.
@@ -352,8 +365,13 @@ class TelegramChannel(ConversationalChannel):
         telegram_id, username, phone_number = self._extract_telegram_user_info(update)
         chat_id = update.effective_chat.id
         
-        # Get or create user
-        user_id = await self._get_or_create_user(telegram_id, username, phone_number)
+        # Check if user is authenticated
+        user_id = await self._ensure_user_authenticated(telegram_id, username, phone_number)
+        
+        if not user_id:
+            # User not authenticated - prompt for auth
+            await self._prompt_phone_auth(update, context)
+            return
         
         # Get conversation context (handles keep-alive)
         conv_ctx = await self.get_or_create_context(user_id)
@@ -401,7 +419,13 @@ class TelegramChannel(ConversationalChannel):
         """
         telegram_id = update.effective_user.id
         chat_id = update.effective_chat.id
-        user_id = await self._get_or_create_user(telegram_id)
+        
+        # Check if user is authenticated
+        user_id = await self._ensure_user_authenticated(telegram_id)
+        if not user_id:
+            await self._prompt_phone_auth(update, context)
+            return
+        
         conv_ctx = await self.get_or_create_context(user_id)
         
         # Get the largest photo
@@ -441,7 +465,13 @@ class TelegramChannel(ConversationalChannel):
         """
         telegram_id = update.effective_user.id
         chat_id = update.effective_chat.id
-        user_id = await self._get_or_create_user(telegram_id)
+        
+        # Check if user is authenticated
+        user_id = await self._ensure_user_authenticated(telegram_id)
+        if not user_id:
+            await self._prompt_phone_auth(update, context)
+            return
+        
         conv_ctx = await self.get_or_create_context(user_id)
         
         # We don't download the video yet to save bandwidth since we're just rejecting it
@@ -483,7 +513,13 @@ class TelegramChannel(ConversationalChannel):
         """
         telegram_id = update.effective_user.id
         chat_id = update.effective_chat.id
-        user_id = await self._get_or_create_user(telegram_id)
+        
+        # Check if user is authenticated
+        user_id = await self._ensure_user_authenticated(telegram_id)
+        if not user_id:
+            await self._prompt_phone_auth(update, context)
+            return
+        
         conv_ctx = await self.get_or_create_context(user_id)
         
         voice = update.effective_message.voice or update.effective_message.audio
@@ -533,7 +569,13 @@ class TelegramChannel(ConversationalChannel):
         """
         telegram_id = update.effective_user.id
         chat_id = update.effective_chat.id
-        user_id = await self._get_or_create_user(telegram_id)
+        
+        # Check if user is authenticated
+        user_id = await self._ensure_user_authenticated(telegram_id)
+        if not user_id:
+            await self._prompt_phone_auth(update, context)
+            return
+        
         conv_ctx = await self.get_or_create_context(user_id)
         
         doc = update.effective_message.document
@@ -584,6 +626,148 @@ class TelegramChannel(ConversationalChannel):
         phone_number = getattr(telegram_user, 'phone_number', None)
         return telegram_id, username, phone_number
     
+    async def _check_user_exists(self, telegram_id: int) -> bool:
+        """
+        Check if a user exists by Telegram ID.
+        
+        Returns:
+            True if user exists, False otherwise
+        """
+        if not is_database_available():
+            return False
+        
+        try:
+            async with AsyncSessionLocal() as db:
+                repo = UserRepository(db)
+                user = await repo.get_by_telegram_id(telegram_id)
+                return user is not None
+        except Exception as e:
+            logger.error(f"Error checking user existence: {e}", exc_info=True)
+            return False
+    
+    async def _ensure_user_authenticated(
+        self,
+        telegram_id: int,
+        username: Optional[str] = None,
+        phone_number: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Ensure user is authenticated before processing messages.
+        
+        Returns:
+            User ID if authenticated, None if not authenticated
+        """
+        user_exists = await self._check_user_exists(telegram_id)
+        
+        if not user_exists:
+            return None
+        
+        return await self._get_or_create_user(telegram_id, username, phone_number)
+    
+    async def _prompt_phone_auth(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Prompt user to share their phone number for authentication.
+        """
+        from app.config import settings
+        
+        # Create contact request button
+        keyboard = [
+            [
+                KeyboardButton(
+                    "📱 Share Phone Number",
+                    request_contact=True
+                )
+            ]
+        ]
+        
+        # Optionally add Web App button for phone auth
+        base_url = settings.OAUTH_BASE_URL or f"https://localhost:{settings.PORT}"
+        if base_url and not base_url.startswith("https://"):
+            base_url = f"https://localhost:{settings.PORT}"
+        base_url = base_url.rstrip('/')
+        webapp_url = f"{base_url}/auth/phone?telegram_id={update.effective_user.id}"
+        
+        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        
+        # Also create inline keyboard with Web App option
+        inline_keyboard = [
+            [
+                InlineKeyboardButton(
+                    "🔐 Authenticate via Web App",
+                    web_app=WebAppInfo(url=webapp_url)
+                )
+            ]
+        ]
+        inline_markup = InlineKeyboardMarkup(inline_keyboard)
+        
+        message_text = (
+            "👋 Welcome to ZStyle!\n\n"
+            "To get started, please authenticate with your phone number.\n\n"
+            "You can either:\n"
+            "1. Share your phone number using the button below, or\n"
+            "2. Use the Web App to enter your phone number and verify with OTP\n\n"
+            "Your phone number is used for secure authentication only."
+        )
+        
+        await update.message.reply_text(
+            message_text,
+            reply_markup=reply_markup
+        )
+        
+        # Send separate message with inline button
+        await update.message.reply_text(
+            "Or use the Web App:",
+            reply_markup=inline_markup
+        )
+    
+    async def _handle_contact(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Handle shared contact (phone number) for authentication.
+        Creates user immediately - no OTP verification.
+        Relies on Telegram's built-in contact verification.
+        """
+        telegram_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        contact = update.message.contact
+        
+        # Verify the contact belongs to the user (Telegram's built-in protection)
+        if contact.user_id != telegram_id:
+            await update.message.reply_text(
+                "Please share your own phone number for authentication."
+            )
+            return
+        
+        phone_number = contact.phone_number
+        # Ensure phone number is in E.164 format
+        if not phone_number.startswith('+'):
+            phone_number = '+' + phone_number
+        
+        try:
+            from services.auth_service import auth_service
+            
+            # Create user immediately
+            result = await auth_service.create_user_with_phone(
+                phone_number=phone_number,
+                telegram_id=telegram_id,
+                telegram_username=update.effective_user.username
+            )
+            
+            user_id = result['user_id']
+            
+            # Update cache
+            self._user_id_cache[telegram_id] = user_id
+            
+            await update.message.reply_text(
+                "✅ Authentication successful!\n\n"
+                "You're now ready to use ZStyle. Send me a message to get started!"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to create user: {e}", exc_info=True)
+            await update.message.reply_text(
+                "❌ Failed to create account. Please try again or use /start."
+            )
+    
     async def _get_or_create_user(
         self,
         telegram_id: int,
@@ -593,8 +777,8 @@ class TelegramChannel(ConversationalChannel):
         """
         Get or create internal user ID for a Telegram user.
         
-        Uses Supabase Auth for user identification. Users must authenticate via
-        phone + OTP first. This method links Telegram ID to existing authenticated users.
+        Gets or creates user account. Users authenticate by sharing their phone number
+        via Telegram contact, which is verified by Telegram.
         
         Supports graceful degradation - returns temporary ID if database unavailable.
         
@@ -642,8 +826,8 @@ class TelegramChannel(ConversationalChannel):
                     self._user_id_cache[telegram_id] = user.id
                     return str(user.id)
                 
-                # User doesn't exist - they need to authenticate via phone OTP first
-                # We cannot create users without Supabase Auth authentication
+                # User doesn't exist - they need to authenticate via phone first
+                # User authentication is handled via phone number sharing
                 logger.warning(
                     f"User with Telegram ID {telegram_id} not found. "
                     "User must authenticate via phone OTP first. "
@@ -741,12 +925,8 @@ class TelegramChannel(ConversationalChannel):
                         # Route to command handler
                         if command == "/start":
                             await self._cmd_start(update, context)
-                        elif command == "/newchat":
-                            await self._cmd_newchat(update, context)
                         elif command == "/help":
                             await self._cmd_help(update, context)
-                        elif command == "/logs":
-                            await self._cmd_logs(update, context)
                         return
             
             # Route to message handlers based on content type

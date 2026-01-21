@@ -1,7 +1,7 @@
 # ZStyle Services - Development Commands
 # Usage: make <command>
 
-.PHONY: help dev test test-unit test-integration lint format clean docker-up docker-down docker-logs docker-rebuild install setup
+.PHONY: help dev test test-unit test-integration lint format clean docker-up docker-down docker-logs docker-rebuild install setup ngrok-start ngrok-stop ngrok-status ngrok-url ngrok-restart-app
 
 # Default target
 help:
@@ -29,7 +29,7 @@ dev:
 # Docker
 docker-up:
 	@echo "Starting Docker services..."
-	docker-compose up --build
+	docker-compose up -d --build
 
 docker-down:
 	@echo "Stopping Docker services..."
@@ -42,7 +42,7 @@ docker-logs:
 docker-rebuild:
 	@echo "Rebuilding Docker services..."
 	docker-compose down
-	docker-compose up --build
+	docker-compose up -d --build
 
 # Utilities
 clean:
@@ -64,3 +64,29 @@ setup:
 	else \
 		echo ".env file already exists"; \
 	fi
+
+# Ngrok commands
+ngrok-start:
+	@echo "Starting ngrok tunnel..."
+	@./scripts/start-ngrok.sh 8000
+
+ngrok-stop:
+	@pkill ngrok || echo "No ngrok process found"
+
+ngrok-status:
+	@curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -m json.tool || echo "Ngrok not running"
+
+ngrok-url:
+	@curl -s http://localhost:4040/api/tunnels 2>/dev/null | \
+		python3 -c "import sys, json; \
+		data = json.load(sys.stdin); \
+		tunnels = data.get('tunnels', []); \
+		https_tunnel = next((t for t in tunnels if t.get('proto') == 'https'), None); \
+		print(https_tunnel['public_url'] if https_tunnel else 'Ngrok not running')" || \
+		echo "Ngrok not running"
+
+# Restart app after ngrok URL changes
+ngrok-restart-app:
+	@echo "Restarting application to load new OAUTH_BASE_URL..."
+	@docker-compose restart app
+	@echo "✅ Application restarted"
