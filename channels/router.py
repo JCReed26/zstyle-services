@@ -28,6 +28,7 @@ from services.activity_log import activity_log_service
 from database.models import ActivityLogSource
 # Import context variable to set user_id for tools
 from agent.exec_func_coach.ticktool import _current_user_id
+from services.adk_credential_loader import get_adk_credential_loader
 
 
 logger = logging.getLogger(__name__)
@@ -152,9 +153,13 @@ class MessageRouter:
         """
         Get existing ADK session or create a new one.
         
+        Pre-loads user credentials into session.state for ToolContext access.
+        
         Note: ADK sessions are lightweight - we create fresh ones rather than
         persisting long histories. User memory is handled by ADK Runner via MemoryService.
         """
+        session_id = None
+        
         if user_id in self._user_sessions:
             # Verify session still exists
             try:
@@ -164,17 +169,46 @@ class MessageRouter:
                     session_id=self._user_sessions[user_id]
                 )
                 if session:
-                    return self._user_sessions[user_id]
+                    session_id = self._user_sessions[user_id]
             except Exception:
                 pass
         
-        # Create new session
-        session = await self.session_service.create_session(
-            app_name=self.app_name,
-            user_id=user_id
-        )
-        self._user_sessions[user_id] = session.id
-        return session.id
+        # Create new session if needed
+        if not session_id:
+            session = await self.session_service.create_session(
+                app_name=self.app_name,
+                user_id=user_id
+            )
+            session_id = session.id
+            self._user_sessions[user_id] = session_id
+        
+        # Pre-load credentials into session state
+        try:
+            session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id=user_id,
+                session_id=session_id
+            )
+            if session and hasattr(session, 'state'):
+                # Store user_id in session state
+                session.state["user_id"] = user_id
+                
+                # Pre-load credentials into session state
+                # Create a mock ToolContext-like object to pre-load credentials
+                # ADK will provide the real ToolContext during tool execution
+                class MockToolContext:
+                    def __init__(self, state):
+                        self.state = state
+                
+                mock_context = MockToolContext(session.state)
+                credential_loader = get_adk_credential_loader()
+                await credential_loader.load_user_credentials(user_id, mock_context)
+                
+                logger.debug(f"Pre-loaded credentials for session {session_id}")
+        except Exception as e:
+            logger.debug(f"Could not pre-load credentials: {e}")
+        
+        return session_id
     
     def _build_adk_content(
         self,
@@ -237,9 +271,8 @@ class MessageRouter:
         # Save the token to properly reset context later
         token = _current_user_id.set(user_id)
         
-        # Try to store user_id in session state for ToolContext access
-        # Note: ADK sessions created with user_id parameter should make it available
-        # via tool_context.session.user_id, but we'll also try to store in state
+        # Pre-load credentials into session state before running agent
+        # This ensures credentials are fresh even for existing sessions
         try:
             session = await self.session_service.get_session(
                 app_name=self.app_name,
@@ -249,10 +282,20 @@ class MessageRouter:
             if session and hasattr(session, 'state'):
                 # Store user_id in session state for ToolContext access
                 session.state["user_id"] = user_id
-                logger.debug(f"Stored user_id in session state for session {session_id}")
+                
+                # Pre-load credentials into session state
+                class MockToolContext:
+                    def __init__(self, state):
+                        self.state = state
+                
+                mock_context = MockToolContext(session.state)
+                credential_loader = get_adk_credential_loader()
+                await credential_loader.load_user_credentials(user_id, mock_context)
+                
+                logger.debug(f"Pre-loaded credentials for session {session_id} before agent execution")
         except Exception as e:
             # If we can't access session state, log but continue (contextvars fallback will work)
-            logger.debug(f"Could not store user_id in session state: {e}")
+            logger.debug(f"Could not pre-load credentials in session state: {e}")
         
         response_parts = []
         

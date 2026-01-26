@@ -458,6 +458,64 @@ async def google_authorize(user_id: str = Query(...)):
     
     return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}")
 
+@app.get("/debug/credentials/{user_id}")
+async def debug_credentials(user_id: str):
+    """
+    Debug endpoint to check credential state.
+    
+    Returns credential status from database and session state.
+    """
+    try:
+        UUID(user_id)  # Validate UUID
+    except ValueError:
+        raise HTTPException(400, "Invalid user_id")
+    
+    result = {
+        "user_id": user_id,
+        "database_credentials": {},
+        "session_state": {}
+    }
+    
+    # Check database credentials
+    try:
+        db_creds = await credential_service.get_credentials(user_id, "google")
+        result["database_credentials"]["google"] = {
+            "exists": bool(db_creds),
+            "has_token": bool(db_creds.get("token") if db_creds else False),
+            "has_refresh_token": bool(db_creds.get("refresh_token") if db_creds else False),
+            "expires_at": db_creds.get("expires_at") if db_creds else None
+        }
+    except Exception as e:
+        result["database_credentials"]["google"] = {"error": str(e)}
+    
+    # Check session state
+    try:
+        if hasattr(message_router, '_user_sessions') and user_id in message_router._user_sessions:
+            session_id = message_router._user_sessions[user_id]
+            session = await bridge_session_service.get_session(
+                app_name="zstyle-bridge",
+                user_id=user_id,
+                session_id=session_id
+            )
+            if session and hasattr(session, 'state'):
+                cred_key = f"auth:google:{user_id}"
+                has_creds_in_state = cred_key in session.state
+                result["session_state"] = {
+                    "session_id": session_id,
+                    "has_state": True,
+                    "has_credentials": has_creds_in_state,
+                    "user_id_in_state": session.state.get("user_id")
+                }
+            else:
+                result["session_state"] = {"has_state": False}
+        else:
+            result["session_state"] = {"active_session": False}
+    except Exception as e:
+        result["session_state"] = {"error": str(e)}
+    
+    return result
+
+
 @app.get("/oauth/google/callback")
 async def google_callback(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
     """Handle Google OAuth callback."""
@@ -540,6 +598,34 @@ async def google_callback(code: str = Query(None), state: str = Query(None), err
             "refresh_token": tokens.get("refresh_token"),
             "expires_in": tokens.get("expires_in", 3600)
         })
+        
+        # Sync credentials to active ADK sessions
+        try:
+            # Check if user has active session
+            if hasattr(message_router, '_user_sessions') and user_id in message_router._user_sessions:
+                session_id = message_router._user_sessions[user_id]
+                session = await bridge_session_service.get_session(
+                    app_name="zstyle-bridge",
+                    user_id=user_id,
+                    session_id=session_id
+                )
+                
+                if session and hasattr(session, 'state'):
+                    # Load credentials using GoogleCredentialProvider to get formatted credentials
+                    from services.google_credential_provider import get_google_credential_provider
+                    credential_provider = get_google_credential_provider()
+                    creds = await credential_provider.get_credentials_for_user(
+                        user_id,
+                        None,  # No tool_context available here, but we'll store directly
+                        service="google"
+                    )
+                    
+                    if creds:
+                        cred_key = f"auth:google:{user_id}"
+                        session.state[cred_key] = creds
+                        logger.info(f"Synced Google credentials to session {session_id} for user {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to sync credentials to session: {e}", exc_info=True)
         
         # Success page that closes the webapp
         html = """

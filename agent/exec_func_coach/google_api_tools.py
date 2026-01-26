@@ -35,6 +35,12 @@ try:
 except ImportError:
     ToolContext = None
 
+# Try to import types for AuthCredential - may not be available in all ADK versions
+try:
+    from google.genai import types
+except ImportError:
+    types = None
+
 from services.google_credential_provider import get_google_credential_provider
 from services.credential_service import credential_service
 from app.config import settings
@@ -174,7 +180,7 @@ async def _call_google_api_with_retry(
                 # Try to refresh token
                 creds = await credential_service.get_credentials(user_id, "google")
                 if creds and creds.get("refresh_token"):
-                    refreshed = await credential_provider._refresh_token(user_id, creds, "google")
+                    refreshed = await credential_provider._refresh_token(user_id, creds, tool_context, "google")
                     if refreshed:
                         logger.info(f"Token refreshed successfully, retrying API call...")
                         continue
@@ -200,6 +206,11 @@ async def get_calendar_events(
     """
     Get Google Calendar events for the user.
     
+    Uses ADK's credential management:
+    1. Checks tool_context.state for cached credentials
+    2. Falls back to database if not cached
+    3. Requests credentials via ADK if missing
+    
     Args:
         max_results: Maximum number of events to return (default: 10)
         time_min: Lower bound (exclusive) for an event's start time (ISO 8601)
@@ -213,6 +224,65 @@ async def get_calendar_events(
     if not user_id:
         return {"success": False, "error": "User ID not found in context"}
     
+    cred_key = f"auth:google:{user_id}"
+    
+    # Step 1: Check tool_context.state first (runtime cache)
+    creds = None
+    if tool_context and hasattr(tool_context, 'state') and tool_context.state:
+        try:
+            creds = tool_context.state.get(cred_key)
+        except Exception as e:
+            logger.debug(f"Error accessing tool_context.state: {e}")
+    
+    # Step 2: If not in cache, try database via credential provider
+    if not creds:
+        credential_provider = get_google_credential_provider()
+        creds = await credential_provider.get_credentials_for_user(
+            user_id,
+            tool_context,
+            service="google"
+        )
+    
+    # Step 3: If still no credentials, request via ADK
+    if not creds:
+        if tool_context and hasattr(tool_context, 'request_credential') and types:
+            try:
+                base_url = settings.OAUTH_BASE_URL or "https://api.example.com"
+                redirect_uri = f"{base_url}/oauth/google/callback"
+                
+                auth_config = types.AuthCredential(
+                    auth_type=types.AuthCredential.AuthType.OAUTH2,
+                    oauth2_config=types.OAuth2Config(
+                        client_id=settings.GOOGLE_CLIENT_ID,
+                        client_secret=settings.GOOGLE_CLIENT_SECRET,
+                        scopes=[
+                            "https://www.googleapis.com/auth/calendar.readonly",
+                            "https://www.googleapis.com/auth/gmail.readonly"
+                        ],
+                        authorization_url="https://accounts.google.com/o/oauth2/v2/auth",
+                        token_url="https://oauth2.googleapis.com/token",
+                        redirect_uri=redirect_uri
+                    )
+                )
+                
+                tool_context.request_credential(auth_config)
+                return {
+                    "success": False,
+                    "error": "Google authentication required. Please authorize access.",
+                    "auth_required": True,
+                    "auth_url": f"{base_url}/oauth/webapp?service=google&user_id={user_id}"
+                }
+            except Exception as e:
+                logger.debug(f"Error calling request_credential: {e}")
+        
+        # Fallback if request_credential not available
+        return {
+            "success": False,
+            "error": "Google credentials not available. Please authenticate first.",
+            "auth_required": True
+        }
+    
+    # Step 4: Use credentials to make API call
     async def _make_request():
         client = await _get_google_api_client(user_id, tool_context)
         if not client:
@@ -261,6 +331,11 @@ async def create_calendar_event(
     """
     Create a Google Calendar event.
     
+    Uses ADK's credential management:
+    1. Checks tool_context.state for cached credentials
+    2. Falls back to database if not cached
+    3. Requests credentials via ADK if missing
+    
     Args:
         summary: Event title
         description: Event description
@@ -276,6 +351,65 @@ async def create_calendar_event(
     if not user_id:
         return {"success": False, "error": "User ID not found in context"}
     
+    cred_key = f"auth:google:{user_id}"
+    
+    # Step 1: Check tool_context.state first (runtime cache)
+    creds = None
+    if tool_context and hasattr(tool_context, 'state') and tool_context.state:
+        try:
+            creds = tool_context.state.get(cred_key)
+        except Exception as e:
+            logger.debug(f"Error accessing tool_context.state: {e}")
+    
+    # Step 2: If not in cache, try database via credential provider
+    if not creds:
+        credential_provider = get_google_credential_provider()
+        creds = await credential_provider.get_credentials_for_user(
+            user_id,
+            tool_context,
+            service="google"
+        )
+    
+    # Step 3: If still no credentials, request via ADK
+    if not creds:
+        if tool_context and hasattr(tool_context, 'request_credential') and types:
+            try:
+                base_url = settings.OAUTH_BASE_URL or "https://api.example.com"
+                redirect_uri = f"{base_url}/oauth/google/callback"
+                
+                auth_config = types.AuthCredential(
+                    auth_type=types.AuthCredential.AuthType.OAUTH2,
+                    oauth2_config=types.OAuth2Config(
+                        client_id=settings.GOOGLE_CLIENT_ID,
+                        client_secret=settings.GOOGLE_CLIENT_SECRET,
+                        scopes=[
+                            "https://www.googleapis.com/auth/calendar.readonly",
+                            "https://www.googleapis.com/auth/gmail.readonly"
+                        ],
+                        authorization_url="https://accounts.google.com/o/oauth2/v2/auth",
+                        token_url="https://oauth2.googleapis.com/token",
+                        redirect_uri=redirect_uri
+                    )
+                )
+                
+                tool_context.request_credential(auth_config)
+                return {
+                    "success": False,
+                    "error": "Google authentication required. Please authorize access.",
+                    "auth_required": True,
+                    "auth_url": f"{base_url}/oauth/webapp?service=google&user_id={user_id}"
+                }
+            except Exception as e:
+                logger.debug(f"Error calling request_credential: {e}")
+        
+        # Fallback if request_credential not available
+        return {
+            "success": False,
+            "error": "Google credentials not available. Please authenticate first.",
+            "auth_required": True
+        }
+    
+    # Step 4: Use credentials to make API call
     async def _make_request():
         client = await _get_google_api_client(user_id, tool_context)
         if not client:

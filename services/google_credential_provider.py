@@ -91,6 +91,7 @@ class GoogleCredentialProvider:
         self,
         user_id: str,
         creds: Dict[str, Any],
+        tool_context: Optional[Any] = None,
         service: str = "google"
     ) -> Optional[Dict[str, Any]]:
         """
@@ -152,6 +153,16 @@ class GoogleCredentialProvider:
                 service,
                 updated_creds
             )
+            
+            # Sync refreshed credentials to tool_context.state if available
+            if tool_context and hasattr(tool_context, 'state') and tool_context.state:
+                try:
+                    cred_key = f"auth:{service}:{user_id}"
+                    formatted_creds = self._format_for_google_api(updated_creds)
+                    tool_context.state[cred_key] = formatted_creds
+                    logger.debug(f"Synced refreshed credentials to tool_context.state for user {user_id}")
+                except Exception as e:
+                    logger.debug(f"Error syncing refreshed credentials to tool_context.state: {e}")
             
             logger.info(f"Successfully refreshed Google token for user {user_id}")
             return updated_creds
@@ -234,7 +245,7 @@ class GoogleCredentialProvider:
         # Step 3: Check expiration and refresh if needed
         if self._is_expired_or_expiring_soon(db_creds):
             logger.debug(f"Credentials expired or expiring soon for user {user_id}, refreshing...")
-            db_creds = await self._refresh_token(user_id, db_creds, service)
+            db_creds = await self._refresh_token(user_id, db_creds, tool_context, service)
             if not db_creds:
                 logger.warning(f"Failed to refresh credentials for user {user_id}")
                 return None
