@@ -1,0 +1,141 @@
+# zstyle-services Project Context
+
+## Project Overview
+
+**zstyle** is building systems with AI to empower lifestyles. The project serves as an executive function coach, personal assistant, nutritionist, fitness coach, therapist, and job coach. These systems help design and track lifestyles by tapping into phone customizability, built to recommend real professionals and empower their craft with data.
+
+**Goal**: Not need to actually track user data but constantly tune custom lifestyle assistant systems that grow with users.
+
+## Tech Stack
+
+- **Backend**: FastAPI (Python)
+- **Frontend Web**: Next.js, shadcn/ui, Tailwind CSS, TypeScript
+- **Frontend Mobile**: React Native, Expo, TypeScript
+- **AI Framework**: LangChain, LangGraph
+- **Language**: Python 3.11+, TypeScript
+- **Testing**: pytest (backend), Jest/Vitest (frontend)
+- **Code Quality**: black, ruff (Python), ESLint, Prettier (TypeScript)
+- **Containerization**: Docker, Docker Compose
+
+## Key Directories
+
+- `app/` - Application code (FastAPI routes, business logic)
+- `frontend/` - Next.js web application
+- `mobile/` - React Native/Expo mobile application
+- `tests/` - Test files (pytest, Jest/Vitest)
+- `docs/` - Project documentation (see Documentation Structure below)
+- `.cursor/` - Cursor agent configuration
+  - `agents/` - Sub-agent definitions (9 specialized agents)
+  - `skills/` - Agent skills (when to use each agent)
+  - `commands/` - Workflow commands (TDD, plan-execute, debug, research)
+  - `rules/` - Coding standards and conventions
+
+## Documentation Structure (`docs/`)
+
+The `docs/` directory contains living documentation that serves as contracts and tracking:
+
+- `docs/working/plans/` - Active development plans (markdown with todos)
+- `docs/working/research/` - Research findings and decisions
+- `docs/working/error-logs.md` - Error tracking and solutions
+- `docs/contracts/api/` - API endpoint contracts
+- `docs/contracts/agents/` - Inter-agent communication contracts
+- `docs/architecture/decisions/` - Architecture Decision Records (ADRs)
+- `docs/reference/` - Reference documentation
+
+**Important**: Always check existing docs before creating new ones. Use semantic search to discover relevant context.
+
+## Agent System
+
+This project uses a multi-agent system with specialized sub-agents:
+
+1. **systems-architect** - Architectural decisions, planning, orchestration
+2. **frontend-engineer** - Next.js web UI implementation, API integration
+3. **mobile-developer** - React Native/Expo mobile app development
+4. **ui-ux-designer** - User-centered design, avoiding AI callouts
+5. **backend-engineer** - FastAPI endpoints, database, APIs
+6. **authsec-engineer** - Authentication, authorization, security
+7. **docker-engineer** - Containerization, Docker Compose
+8. **devops-engineer** - CI/CD, infrastructure, deployment
+9. **ai-engineer** - LangChain/LangGraph agents, LLM integration
+
+**Sub-agent definitions**: `.cursor/agents/[agent-name]/SUBAGENT.md`
+**Skills**: `.cursor/skills/[agent-name]/SKILL.md`
+
+## Context Discovery Patterns
+
+When working on tasks, agents should naturally discover relevant context:
+
+1. **Check existing plans**: `docs/working/plans/` - Avoid duplicate work
+2. **Check contracts**: `docs/contracts/` - Understand API/agent interfaces
+3. **Check research**: `docs/working/research/` - Learn from past decisions
+4. **Check error logs**: `docs/working/error-logs.md` - Avoid known issues
+5. **Semantic search**: Use `codebase_search` to find related code/docs
+6. **File pattern matching**: Search `docs/` by topic keywords
+
+**Discovery is automatic** - agents should search before creating new docs.
+
+## Coding Standards
+
+- **Type hints**: Required for all function signatures
+- **Docstrings**: Required for all public functions and classes
+- **Error handling**: Comprehensive error handling with user context
+- **Testing**: TDD approach, especially for LangChain agents
+- **Formatting**: Use `black` for formatting, `ruff` for linting
+- **Follow PEP 8** with FastAPI/LangChain conventions
+
+See `.cursor/rules/fastapi-langchain-standards.mdc` for detailed standards.
+
+## Workflow Commands
+
+Available workflow commands in `.cursor/commands/`:
+
+- **tdd-langchain** - Test-driven development for LangChain agents
+- **plan-and-execute** - Comprehensive planning and execution workflow
+- **debug** - Systematic debugging workflow
+- **research** - Research workflow before implementation
+
+## Common Patterns
+
+### Before Starting Work
+
+1. Check `docs/working/plans/` for existing plans
+2. Check `docs/contracts/` for API/agent contracts
+3. Check `docs/working/research/` for related research
+4. Use semantic search to find related code/docs
+
+### When Creating Plans
+
+1. Create plan in `docs/working/plans/[feature-name].md`
+2. Use plan template for consistency
+3. Break down into tasks with clear owners (sub-agents)
+4. Track progress by updating todos
+5. Update plan as work progresses
+
+### When Modifying APIs
+
+1. Check `docs/contracts/api/` for existing contracts
+2. Update contract when API changes
+3. Version contracts (v1, v2, etc.)
+4. Document breaking changes
+
+### When Encountering Errors
+
+1. Check `docs/working/error-logs.md` for similar errors
+2. Document new errors with solution
+3. Update error log with what worked/didn't work
+
+## Multi-User Considerations
+
+- **Small-scale multi-user**: Optimize for correctness over extreme scale
+- **User isolation**: Agent state and data scoped per user
+- **Error handling**: Every user-facing operation handles errors gracefully
+- **Concurrent safety**: Use async/await properly, avoid shared mutable state
+
+## Documentation as Contracts
+
+- **Plans**: Living documents updated as work progresses
+- **Contracts**: API and agent contracts define interfaces
+- **Error logs**: Track past errors and solutions
+- **ADRs**: Document architectural decisions with rationale
+
+All documentation should be updated when relevant changes occur.
