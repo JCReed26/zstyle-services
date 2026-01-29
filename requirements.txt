@@ -1,0 +1,17 @@
+fastapi
+uvicorn 
+apscheduler
+cryptography
+
+langchain
+langgraph
+langchain-community
+langchain-google-genai
+langchain[google-gmail]
+
+openmemory
+sse_starlette
+
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

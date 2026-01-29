@@ -5,6 +5,7 @@ Formal contracts defining interfaces between components.
 ## Purpose
 
 Contracts serve as:
+
 - **API Specifications**: Define endpoint interfaces
 - **Agent Contracts**: Define inter-agent communication
 - **Version Control**: Track contract versions
@@ -15,22 +16,16 @@ Contracts serve as:
 ### API Contracts (`api/`)
 
 Define FastAPI endpoint specifications:
+
 - Request/response models
 - Error responses
 - Authentication requirements
 - Version information
 
-### Agent Contracts (`agents/`)
-
-Define inter-agent communication:
-- Input/output schemas
-- Communication protocols
-- Error handling
-- Version information
-
 ## Contract Versioning
 
 Contracts are versioned when breaking changes occur:
+
 - **v1**: Initial version
 - **v2**: Breaking changes from v1
 - **v3**: Breaking changes from v2

@@ -1,0 +1,15 @@
+Metadata-Version: 2.3
+Name: openmemory
+Version: 0.1.0
+Summary: 
+Author: dany
+Author-email: 973031439@qq.com
+Requires-Python: >=3.10
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Description-Content-Type: text/markdown
+
+
