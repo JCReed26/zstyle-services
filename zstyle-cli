@@ -1,3 +1,0 @@
-#!/bin/bash
-# ZStyle CLI entrypoint
-python -m app.cli.main "$@"
