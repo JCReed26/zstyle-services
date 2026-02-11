@@ -9,27 +9,3 @@ services:
     volumes:
       - ./app:/app/app
     command: uvicorn app.main:app --reload --host 0.0.0.0
-    depends_on:
-      - openmemory
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-
-  openmemory:
-    image: openmemory/openmemory:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - openmemory_data:/data
-
-volumes:
-  openmemory_data:

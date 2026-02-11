@@ -1,166 +1,150 @@
 # Development Setup Guide
 
-## Phase 1: Executive Function Coach with OpenMemory
-
-This setup creates a working local development environment with:
-- Backend FastAPI server with LangGraph agent
+This guide creates a working local development environment with:
+- Backend FastAPI server with LangGraph agents
 - Frontend Next.js chat interface
-- OpenMemory for persistent conversation context
+- OpenMemory (CaviraOSS) for persistent conversation context via MCP
 
-## Prerequisites
+---
 
-1. **Free up disk space** - You need at least 2GB free
-   - Current status: DISK FULL (0 bytes available)
-   - Run: `docker system prune -a` to clean Docker
-   - Or: `npm cache clean --force` to clean npm cache
+## Step-by-Step Setup
 
-2. **Docker Desktop** - Must be running
+### Step 1: Prerequisites
 
-3. **Google API Key** - For Gemini LLM
-   - Get one at: https://makersuite.google.com/app/apikey
-   - Add to `.env` file: `GOOGLE_API_KEY=your_key_here`
+- **Docker Desktop** — must be running
+- **Google API Key** — for Gemini LLM: https://makersuite.google.com/app/apikey
 
-## Setup Steps
+### Step 2: Initialize OpenMemory Submodule
 
-### 1. Configure Environment
+The OpenMemory backend is provided as a git submodule. Initialize it once:
 
 ```bash
-# Edit .env file and add your Google API key
-nano .env
-# Set: GOOGLE_API_KEY=your_actual_key
+git submodule update --init openmemory-repo
 ```
 
-### 2. Start Services
+You should see `openmemory-repo/packages/openmemory-js/` populated with source files.
+
+### Step 3: Configure Environment
 
 ```bash
-# Build and start all services
-docker-compose -f docker-compose.dev.yml up --build
-
-# This starts:
-# - Backend API at http://localhost:8000
-# - Frontend at http://localhost:3000
-# - OpenMemory at http://localhost:8080
+cp .env.example .env
 ```
 
-### 3. Test the System
+Edit `.env` and set:
+
+- `GOOGLE_API_KEY` — your Gemini API key
+- `OPENMEMORY_URL` — leave as `http://openmemory:8080` for Docker
+- `JWT_SECRET_KEY` — change for production
+- (Optional) `OM_TIER`, `OM_EMBEDDINGS`, `OM_API_KEY` — OpenMemory overrides
+
+### Step 4: Start Services
+
+```bash
+docker compose up --build
+```
+
+This starts:
+- **Backend** at http://localhost:8000
+- **Frontend** at http://localhost:3000
+- **OpenMemory API** at http://localhost:8080
+
+### Step 5: Verify OpenMemory
+
+```bash
+curl http://localhost:8080/health
+```
+
+Expected: `{"status":"ok"}` or similar.
+
+### Step 6: Test the System
 
 1. Open http://localhost:3000
-2. Type: "Hi, I need help with time management"
-3. Agent should respond
-4. Ask: "What did I just ask you about?"
-5. Agent should remember (using OpenMemory)
+2. Send: "Hi, I need help with time management"
+3. Ask: "What did I just ask you about?"
+4. The agent should remember via OpenMemory.
 
-### 4. Verify OpenMemory
+### Step 7: (Optional) Enable Cursor MCP
 
-```bash
-# Check OpenMemory is working
-curl http://localhost:8080/health
+When OpenMemory is running, Cursor can use its MCP tools. The project includes `.cursor/mcp.json` pointing at `http://localhost:8080/mcp`.
 
-# Check backend
-curl http://localhost:8000/health
-```
+**Available tools:** `openmemory_query`, `openmemory_store`, `openmemory_list`, `openmemory_get`, `openmemory_reinforce`
+
+Ensure `docker compose up` is running, then Cursor connects automatically. For global config, copy the openmemory entry to `~/.cursor/mcp.json`.
+
+---
 
 ## Troubleshooting
 
-### Disk Space Issues
+### Docker Build Fails / "unexpected end of JSON input"
 
-If you see "ENOSPC: no space left on device":
-
-```bash
-# Clean Docker (will remove all unused images)
-docker system prune -a --volumes
-
-# Clean npm cache
-npm cache clean --force
-
-# Find large files
-du -sh * | sort -h
-```
-
-### OpenMemory Connection Issues
-
-If backend can't connect to OpenMemory:
+Docker cache may be corrupted:
 
 ```bash
-# Check OpenMemory logs
-docker-compose -f docker-compose.dev.yml logs openmemory
-
-# Restart services
-docker-compose -f docker-compose.dev.yml restart
+docker compose down
+docker system prune -a
+docker compose up --build
 ```
+
+### OpenMemory Submodule Empty
+
+```bash
+git submodule update --init openmemory-repo
+```
+
+If it fails, ensure you have network access and the CaviraOSS/OpenMemory repo is reachable.
+
+### Backend Can't Connect to OpenMemory
+
+- Ensure `OPENMEMORY_URL=http://openmemory:8080` in `.env`
+- Wait for OpenMemory healthcheck (about 30s after start)
+- Check logs: `docker compose logs openmemory`
 
 ### Agent Not Responding
 
-Check backend logs:
+- Verify `GOOGLE_API_KEY` is set in `.env`
+- Check backend logs: `docker compose logs backend`
 
-```bash
-docker-compose -f docker-compose.dev.yml logs backend
-```
-
-Common issues:
-- Missing GOOGLE_API_KEY in .env
-- OpenMemory not started
-- LangGraph dependencies missing
+---
 
 ## Development Workflow
 
-### Hot Reload
+| Command | Description |
+|--------|-------------|
+| `docker compose up --build` | Start all services |
+| `docker compose logs -f openmemory` | View OpenMemory logs |
+| `docker compose down` | Stop services |
+| `docker compose down -v` | Stop and remove volumes (clears OpenMemory data) |
 
-Both frontend and backend support hot reload:
-- Backend: Changes to `/app` reload automatically
-- Frontend: Changes to `/frontend` reload automatically
+---
 
-### Viewing Logs
-
-```bash
-# All services
-docker-compose -f docker-compose.dev.yml logs -f
-
-# Just backend
-docker-compose -f docker-compose.dev.yml logs -f backend
-
-# Just frontend
-docker-compose -f docker-compose.dev.yml logs -f frontend
-```
-
-### Stopping Services
-
-```bash
-# Stop all
-docker-compose -f docker-compose.dev.yml down
-
-# Stop and remove volumes (clears OpenMemory data)
-docker-compose -f docker-compose.dev.yml down -v
-```
-
-## Next Steps
-
-Once Phase 1 is working:
-- **Phase 2**: Add other agents (Fitness Coach, Nutritionist, Personal Assistant) with A2A protocol
-- **Phase 3**: Add simple authentication for multi-user support
-
-## Architecture Overview
+## Architecture
 
 ```
 ┌─────────────┐     HTTP      ┌─────────────┐
 │   Frontend  │ ───────────▶  │   Backend   │
 │  (Next.js)  │               │  (FastAPI)  │
+│  :3000      │               │   :8000     │
 └─────────────┘               └──────┬──────┘
                                      │
-                              ┌──────┴──────┐
-                              │             │
-                         ┌────▼────┐   ┌────▼────────┐
-                         │  Agent  │   │ OpenMemory  │
-                         │LangGraph│   │  (Persist)  │
-                         └─────────┘   └─────────────┘
+                              MCP over HTTP
+                                     │
+                              ┌──────▼──────────────┐
+                              │  MemoryManager      │
+                              │  (MCP client)       │
+                              └──────┬─────────────┘
+                                     │
+                              ┌──────▼────────┐
+                              │  OpenMemory   │
+                              │  API + MCP    │
+                              │    :8080      │
+                              └───────────────┘
 ```
 
-## Files Created
+---
 
-- `/docker-compose.dev.yml` - Docker services
-- `/Dockerfile.dev` - Backend container
-- `/app/main.py` - FastAPI app
-- `/app/core/memory.py` - OpenMemory integration
-- `/app/agents/exec_func_coach/agent.py` - LangGraph agent
-- `/frontend/app/page.tsx` - Chat UI
-- `/frontend/Dockerfile.dev` - Frontend container
+## Files Reference
+
+- `.env.example` — Environment template (copy to `.env`)
+- `docker-compose.yml` — Backend, frontend, OpenMemory
+- `.cursor/mcp.json` — Cursor MCP config for OpenMemory
+- `openmemory-repo/` — CaviraOSS/OpenMemory (git submodule)
