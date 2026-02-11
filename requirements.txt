@@ -10,8 +10,14 @@ langchain-google-genai
 langchain[google-gmail]
 
 openmemory
-sse_starlette
+sse-starlette==2.1.0
+httpx==0.27.0
+pyjwt==2.8.0
 
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
+
+pytest
+pytest-asyncio
+langsmith
