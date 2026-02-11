@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agent
+    ports:
+      - "8123:8123"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - copilotkit-network
+    volumes:
+      - ./apps/agent:/app/apps/agent
+
+  mcp:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mcp
+    ports:
+      - "3108:3108"
+    environment:
+      - NODE_ENV=development
+    networks:
+      - copilotkit-network
+    depends_on:
+      - agent
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    ports:
+      - "3000:3000"
+    environment:
+      - LANGGRAPH_DEPLOYMENT_URL=http://agent:8123
+      - MCP_SERVER_URL=http://mcp:3108/mcp
+    networks:
+      - copilotkit-network
+    depends_on:
+      agent:
+        condition: service_healthy
+
+networks:
+  copilotkit-network:
+    driver: bridge
