@@ -1,15 +1,44 @@
 version: '3.8'
 
 services:
+  memory:
+    build:
+      context: ./Memory/packages/openmemory-js
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - OM_PORT=8080
+      - OM_TIER=smart
+      - OM_EMBEDDINGS=gemini
+      - GEMINI_API_KEY=${GOOGLE_API_KEY}
+      - OM_EMBEDDING_FALLBACK=synthetic
+      - OM_EMBED_MODE=simple
+      - OM_DB_PATH=/data/openmemory.sqlite
+      - OM_METADATA_BACKEND=sqlite
+      - OM_VECTOR_BACKEND=sqlite
+    volumes:
+      - openmemory_data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - copilotkit-network
+
   agent:
     build:
       context: .
-      dockerfile: docker/Dockerfile.agent
+      dockerfile: Docker/Dockerfile.agent
     ports:
       - "8123:8123"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - OPENMEMORY_MCP_URL=http://memory:8080/mcp
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123/health"]
       interval: 10s
@@ -19,30 +48,31 @@ services:
     networks:
       - copilotkit-network
     volumes:
-      - ./apps/agent:/app/apps/agent
+      - ./Agents:/app/Agents
+    depends_on:
+      memory:
+        condition: service_healthy
 
-  mcp:
+  mcp-threejs:
     build:
       context: .
-      dockerfile: docker/Dockerfile.mcp
+      dockerfile: Docker/Dockerfile.mcp-threejs
     ports:
       - "3108:3108"
     environment:
       - NODE_ENV=development
     networks:
       - copilotkit-network
-    depends_on:
-      - agent
 
   app:
     build:
       context: .
-      dockerfile: docker/Dockerfile.app
+      dockerfile: Docker/Dockerfile.app
     ports:
       - "3000:3000"
     environment:
       - LANGGRAPH_DEPLOYMENT_URL=http://agent:8123
-      - MCP_SERVER_URL=http://mcp:3108/mcp
+      - MCP_SERVER_URL=http://mcp-threejs:3108/mcp
     networks:
       - copilotkit-network
     depends_on:
@@ -52,3 +82,7 @@ services:
 networks:
   copilotkit-network:
     driver: bridge
+
+volumes:
+  openmemory_data:
+    driver: local
