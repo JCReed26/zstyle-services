@@ -46,6 +46,12 @@ package-lock.json
 yarn.lock
 bun.lockb
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.Python
+
 # LangGraph API
 .langgraph_api
 

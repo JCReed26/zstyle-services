@@ -1,175 +1,92 @@
-# CopilotKit <> LangGraph Starter
+# ZStyle Services
 
-This is a starter template for building AI agents using [LangGraph](https://www.langchain.com/langgraph) and [CopilotKit](https://copilotkit.ai). It provides a modern Next.js application with an integrated LangGraph agent to be built on top of.
+AI-powered monorepo with CopilotKit frontend, LangGraph agent (Gemini), persistent memory (OpenMemory), and extensible MCP servers.
 
-https://github.com/user-attachments/assets/47761912-d46a-4fb3-b9bd-cb41ddd02e34
+## Architecture
 
-## Prerequisites
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Apps/       │────▶│  Agents/     │────▶│  Memory/     │
+│  Next.js 16  │     │  LangGraph   │     │  OpenMemory  │
+│  port 3000   │     │  port 8123   │     │  port 8080   │
+└─────────────┘     └──────┬───────┘     └──────────────┘
+                           │
+                    ┌──────▼───────┐
+                    │  MCP/threejs │
+                    │  Three.js 3D │
+                    │  port 3108   │
+                    └──────────────┘
+```
 
-- Node.js 18+ 
-- Python 3.8+
-- Any of the following package managers:
-  - [pnpm](https://pnpm.io/installation) (recommended)
-  - npm
-  - [yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)
-  - [bun](https://bun.sh/)
-- OpenAI API Key (for the LangGraph agent)
+## Repository Structure
 
-> **Note:** This repository ignores lock files (package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb) to avoid conflicts between different package managers. Each developer should generate their own lock file using their preferred package manager. After that, make sure to delete it from the .gitignore.
+```
+/
+├── Agents/          → Python LangGraph agent (Gemini-powered)
+├── Apps/            → Next.js 16 + CopilotKit frontend
+├── MCP/             → MCP servers (add new ones here)
+│   └── threejs/     → Three.js 3D visualization MCP
+├── Memory/          → CaviraOSS/OpenMemory (git submodule)
+├── Docker/          → Dockerfiles for all services
+├── docker-compose.yml
+├── package.json     → pnpm monorepo root
+└── pnpm-workspace.yaml  → "Apps/", "MCP/*"
+```
 
-## Getting Started
+## Quick Start
 
-1. Install dependencies using your preferred package manager:
 ```bash
-# Using pnpm (recommended)
+# 1. Clone with submodules
+git clone --recurse-submodules <repo-url>
+cd zstyle-services
+
+# 2. Set up environment
+cp .env.example .env
+# Edit .env and add your GOOGLE_API_KEY
+
+# 3. Run with Docker
+docker compose up --build
+
+# 4. Open http://localhost:3000
+```
+
+## Development (without Docker)
+
+```bash
+# Install JS dependencies
 pnpm install
 
-# Using npm
-npm install
-
-# Using yarn
-yarn install
-
-# Using bun
-bun install
-```
-
-
-2. Set up your environment variables:
-```bash
-cp .env.example .env
-```
-
-Then edit the `.env` file and add your OpenAI API key:
-
-```bash
-OPENAI_API_KEY=your-openai-api-key-here
-```
-
-3. Start the development server:
-```bash
-# Using pnpm
+# Start all JS apps (frontend + MCP servers)
 pnpm dev
 
-# Using npm
-npm run dev
-
-# Using yarn
-yarn dev
-
-# Using bun
-bun run dev
+# Start agent separately (requires Python 3.12+ and uv)
+cd Agents && uv run langgraph dev --port 8123 --no-browser
 ```
 
-This will start both the UI and agent servers concurrently.
+## Services
 
-## Docker Setup
+| Service | Port | Description |
+|---------|------|-------------|
+| `app` | 3000 | Next.js frontend with CopilotKit chat + canvas |
+| `agent` | 8123 | LangGraph agent with Gemini LLM |
+| `mcp-threejs` | 3108 | Three.js 3D visualization MCP server |
+| `memory` | 8080 | OpenMemory persistent memory + MCP |
 
-To run all services (frontend, agent, MCP server) in Docker containers:
+## Adding a New MCP Server
 
-### Prerequisites
-- [Docker](https://www.docker.com/products/docker-desktop) and Docker Compose installed
-- OpenAI API Key
+1. Create `MCP/your-server/` with a `package.json`
+2. It auto-registers as a pnpm workspace (via `MCP/*` glob)
+3. Add a Dockerfile at `Docker/Dockerfile.mcp-your-server`
+4. Add a service entry in `docker-compose.yml`
 
-### Quick Start
+## Environment Variables
 
-1. Set up your environment variables:
-```bash
-cp .env.example .env
-```
+See [.env.example](.env.example) for all configuration options.
 
-Then edit the `.env` file and add your OpenAI API key:
-```bash
-OPENAI_API_KEY=your-openai-api-key-here
-```
+## Tech Stack
 
-2. Start all services:
-```bash
-docker compose up --build
-```
-
-Or use the convenience script:
-```bash
-pnpm docker:up
-```
-
-Services will be available at:
-- **Frontend**: http://localhost:3000
-- **Agent API**: http://localhost:8123
-- **MCP Server**: http://localhost:3108
-
-### Common Docker Commands
-
-```bash
-# Start all services
-pnpm docker:up
-
-# Stop all services
-pnpm docker:down
-
-# View logs
-pnpm docker:logs
-
-# View logs for a specific service
-docker compose logs -f agent
-docker compose logs -f app
-docker compose logs -f mcp
-
-# Rebuild services
-docker compose build --no-cache
-```
-
-### Troubleshooting
-
-**Port conflicts**: If ports 3000, 8123, or 3108 are already in use:
-- Stop other services: `docker compose down`
-- Or modify port mappings in `docker-compose.yml`
-
-**Environment variables not loaded**: Make sure `.env` file exists and contains your OpenAI API key
-
-**Service fails to start**: Check logs with `docker compose logs service-name` for specific error messages
-
-## Available Scripts
-The following scripts can also be run using your preferred package manager:
-- `dev` - Starts both UI and agent servers in development mode
-- `dev:debug` - Starts development servers with debug logging enabled
-- `dev:ui` - Starts only the Next.js UI server
-- `dev:agent` - Starts only the LangGraph agent server
-- `build` - Builds the Next.js application for production
-- `start` - Starts the production server
-- `lint` - Runs ESLint for code linting
-- `install:agent` - Installs Python dependencies for the agent
-
-## Documentation
-
-The main UI component is in `src/app/page.tsx`. You can:
-- Modify the theme colors and styling
-- Add new frontend actions
-- Customize the CopilotKit sidebar appearance
-
-## 📚 Documentation
-
-- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/) - Learn more about LangGraph and its features
-- [CopilotKit Documentation](https://docs.copilotkit.ai) - Explore CopilotKit's capabilities
-
-## Contributing
-
-Feel free to submit issues and enhancement requests! This starter is designed to be easily extensible.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Troubleshooting
-
-### Agent Connection Issues
-If you see "I'm having trouble connecting to my tools", make sure:
-1. The LangGraph agent is running on port 8000
-2. Your OpenAI API key is set correctly
-3. Both servers started successfully
-
-### Python Dependencies
-If you encounter Python import errors:
-```bash
-npm install:agent
-```
+- **Frontend**: Next.js 16, React 19, TailwindCSS 4, CopilotKit v2
+- **Agent**: LangGraph (Python), Google Gemini (gemini-2.0-flash)
+- **Memory**: CaviraOSS/OpenMemory (SQLite + Gemini embeddings)
+- **MCP**: Three.js visualization server
+- **Infra**: Docker Compose, Turborepo, pnpm workspaces

@@ -57,7 +57,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           # Start the Next.js frontend in background
-          pnpm --filter app start &
+          pnpm --filter @repo/app start &
           FRONTEND_PID=$!
 
           # Wait for frontend to start (max 30 seconds)
@@ -88,7 +88,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           # Start the Next.js frontend in background
-          pnpm --filter app start &
+          pnpm --filter @repo/app start &
 
           # Wait for frontend to start (max 30 seconds)
           $timeout = 30
