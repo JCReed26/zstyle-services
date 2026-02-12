@@ -16,7 +16,11 @@ client = MultiServerMCPClient({
     "copilotkit": {
         "transport": "http",
         "url": "https://mcp.copilotkit.ai",
-    }
+    },
+    "openmemory": {
+        "transport": "http",
+        "url": os.environ.get("OPENMEMORY_MCP_URL", "http://localhost:8080/mcp"),
+    },
 })
 
 mcp_tools = asyncio.run(client.get_tools())
