@@ -3,8 +3,10 @@ This is the main entry point for the agent.
 It defines the workflow graph, state, tools, nodes and edges.
 """
 
+import os
 import asyncio
 from langchain.agents import create_agent
+from langchain_google_genai import ChatGoogleGenerativeAI
 from copilotkit import CopilotKitMiddleware
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from src.query import query_data
@@ -19,8 +21,13 @@ client = MultiServerMCPClient({
 
 mcp_tools = asyncio.run(client.get_tools())
 
+model = ChatGoogleGenerativeAI(
+    model=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
+    google_api_key=os.environ.get("GOOGLE_API_KEY"),
+)
+
 agent = create_agent(
-    model="gpt-5.2",
+    model=model,
     tools=[query_data, *mcp_tools, *todo_tools],
     middleware=[CopilotKitMiddleware()],
     state_schema=AgentState,
