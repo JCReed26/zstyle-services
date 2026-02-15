@@ -1,55 +1,54 @@
 # ZStyle Services
 
-Executive Function Coach - AI-powered personal productivity assistant
+> This repo is for the autonomous-executive-assistant. It is becoming the backend to a dream app of mine.
 
-## Architecture
+AI-powered monorepo with CopilotKit frontend, LangGraph agent (Gemini), persistent memory (OpenMemory), and extensible MCP servers.
 
-app - hosts ADK fast api app
+## Quick Start
 
-telegram_bot - hosts telegram bot with polling
+```bash
+# 1. Clone with submodules
+git clone --recurse-submodules <repo-url>
+cd zstyle-services
 
-## Components
+# 2. Set up environment
+cp .env.example .env
+# Edit .env and add your GOOGLE_API_KEY
 
-### Agent
+# 3. Run with Docker
+docker compose up --build
 
-- `/agents/exec_func_coach/` - Executive Function Coach agent
-- Acts as friend and guide to creating a life that moves the day to day forward
-- Helps create set and reach goals and Design systems to improve the experience of life
-- Uses Google ADK framework
-- Integrates with Google Calendar, TickTick, and more for life management
-
-### Services
-
-- `/services/memory/` - Long-term memory storage & RAG (No sessions just users and memory)
-- `/services/artifacts/` - File and document storage
-- `/services/activity_log.py` - Session management
-
-### MCP (Model Context Protocol)
-
-- none implemented yet to come soon
-- idea 1: telegram mcp but for group chats with a2a agents working together
-- idea 2: twilio mcp server for agent to call users as reminder
-
-## Setup
-
-1. Copy `.env.example` to `.env` and configure:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Run with Docker:
-
-   ```bash
-   bash ddup.sh
-   ```
+# 4. Open http://localhost:3000
+```
 
 ## Development
 
-- SQLite Database for initial development (move to supabase for prod)
+```bash
+# Without Docker - Install JS dependencies
+pnpm install
 
-## Next Steps
+# Start frontend
+pnpm dev
 
-- Admin Dashboards For User Management and Viewing
-- Create Proper User Onboarding Process
-- Establish Memory, Credentials, and Infra CI/CD Prod vs Dev Bot
+# Start agent (requires Python 3.12+ and uv)
+cd agents && uv run langgraph dev --port 8123 --no-browser
+
+# Environment setup
+cp .env.example .env
+# Add GOOGLE_API_KEY to .env
+```
+
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `app` | 3000 | Next.js frontend with CopilotKit chat |
+| `agent` | 8123 | LangGraph agent with Gemini LLM (2 endpoints: exec_func_coach, personal_assistant) |
+| `memory` | 8080 | OpenMemory persistent memory + MCP |
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React 19, TailwindCSS 4, CopilotKit v2
+- **Agents**: LangGraph (Python), Google Gemini (gemini-2.0-flash), 2 endpoints
+- **Memory**: CaviraOSS/OpenMemory (SQLite + Gemini embeddings, MCP server)
+- **Infra**: Docker Compose, Turborepo, pnpm workspaces

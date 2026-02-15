@@ -1,0 +1,11 @@
+{
+  "python_version": "3.12",
+  "dockerfile_lines": [],
+  "dependencies": ["."],
+  "package_manager": "uv",
+  "graphs": {
+    "exec_func_coach": "./main.py:exec_func_coach_graph",
+    "personal_assistant": "./main.py:personal_assistant_graph"
+  },
+  "env": "../.env"
+}

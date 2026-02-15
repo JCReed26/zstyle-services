@@ -1,14 +1,65 @@
-gha-creds-*.json
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-__pycache__
-/__pycache__
-__pycache__/*
-*/__pycache__
-*/__pycache__/*
+# dependencies
+node_modules
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-.pytest_cache
+# testing
+coverage
 
-.venv
-/.venv
-.env
-zstyle.db
+# next.js
+.next/
+out/
+
+# production
+build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# lock files
+package-lock.json
+yarn.lock
+bun.lockb
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.Python
+
+# LangGraph API
+.langgraph_api
+
+# Git worktrees
+.worktrees
+
+# Turbo
+.turbo
+
+# Tools
+.claude

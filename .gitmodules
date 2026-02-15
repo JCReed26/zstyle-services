@@ -1,0 +1,3 @@
+[submodule "mcp/open_memory"]
+	path = mcp/open_memory
+	url = https://github.com/CaviraOSS/OpenMemory.git

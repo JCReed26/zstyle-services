@@ -1,85 +1,74 @@
-# =============================================================================
-# ZStyle Services - Docker Compose Configuration
-# =============================================================================
-#
-# SERVICES:
-#   app          - Main FastAPI + ADK service (port 8000)
-#   telegram-bot - Telegram channel (connects to app)
-#
-# USAGE:
-#   Development:  docker-compose up --build
-#   Production:   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
-#   Reset DB:     docker-compose run --rm app python reset_db.py
-#
-# VOLUMES:
-#   - ./zstyle.db is mounted for persistent SQLite storage
-#   - ./client_secret.json for Google OAuth (if using calendar)
-#
-# =============================================================================
-
 services:
-  # ---------------------------------------------------------------------------
-  # Main Application (FastAPI + ADK)
-  # ---------------------------------------------------------------------------
-  app:
-    build: .
-    container_name: zstyle_app
-    restart: unless-stopped
+  memory:
+    build:
+      context: ./mcp/open_memory/packages/openmemory-js
+      dockerfile: Dockerfile
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
+      - "8080:8080"
     environment:
-      - PORT=8000
+      - OM_PORT=8080
+      - OM_TIER=smart
+      - OM_EMBEDDINGS=gemini
+      - GEMINI_API_KEY=${GOOGLE_API_KEY}
+      - OM_EMBEDDING_FALLBACK=synthetic
+      - OM_EMBED_MODE=simple
+      - OM_DB_PATH=/data/openmemory.sqlite
+      - OM_METADATA_BACKEND=sqlite
+      - OM_VECTOR_BACKEND=sqlite
     volumes:
-      # Persistent database
-      - ./zstyle.db:/app/zstyle.db
-      # Google OAuth credentials (optional)
-      - ./client_secret.json:/app/client_secret.json:ro
+      - openmemory_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
+    networks:
+      - copilotkit-network
 
-  # ---------------------------------------------------------------------------
-  # Telegram Bot Channel
-  # ---------------------------------------------------------------------------
-  telegram-bot:
-    build: .
-    container_name: zstyle_telegram_bot
-    restart: unless-stopped
-    command: python -m channels.telegram_bot
-    env_file:
-      - .env
+  agent:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.agent
+    ports:
+      - "8123:8123"
     environment:
-      # Point to the app service for API calls
-      - AGENT_URL=http://app:8000
-    depends_on:
-      app:
-        condition: service_healthy
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - OPENMEMORY_MCP_URL=http://memory:8080/mcp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/docs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - copilotkit-network
     volumes:
-      # Share database for user lookups
-      - ./zstyle.db:/app/zstyle.db
+      - ./agents:/app/agents
+    depends_on:
+      memory:
+        condition: service_healthy
 
-# =============================================================================
-# NOTES:
-# =============================================================================
-#
-# Adding a new channel:
-#   1. Create the channel in channels/your_channel/
-#   2. Add a new service here similar to telegram-bot
-#   3. Set AGENT_URL=http://app:8000
-#
-# Environment Variables (.env):
-#   GOOGLE_API_KEY=your-gemini-api-key
-#   TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-#   DATABASE_URL=postgresql://... (optional, for production)
-#
-# For production, consider:
-#   - Using a separate PostgreSQL container
-#   - Adding nginx for SSL termination
-#   - Using Docker secrets for sensitive data
-#
-# =============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.app
+    ports:
+      - "3000:3000"
+    environment:
+      - LANGGRAPH_DEPLOYMENT_URL=http://agent:8123
+    networks:
+      - copilotkit-network
+    depends_on:
+      agent:
+        condition: service_healthy
+
+networks:
+  copilotkit-network:
+    driver: bridge
+
+volumes:
+  openmemory_data:
+    driver: local

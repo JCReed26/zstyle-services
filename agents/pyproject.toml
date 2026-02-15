@@ -1,0 +1,18 @@
+[project]
+name = "zstyle-agent"
+version = "0.1.0"
+description = "A LangGraph agent powered by Google Gemini"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=1.2.5",
+    "langgraph==1.0.5",
+    "langsmith>=0.4.49",
+    "fastapi>=0.115.5,<1.0.0",
+    "uvicorn>=0.29.0,<1.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "langgraph-cli[inmem]>=0.4.11",
+    "langchain-google-genai>=2.1.0",
+    "copilotkit>=0.1.77",
+    "langgraph-api>=0.7.16",
+    "langchain-mcp-adapters>=0.2.1",
+]

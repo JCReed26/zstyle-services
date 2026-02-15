@@ -1,0 +1,32 @@
+# Dockerfile for Python LangGraph Agent
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies and uv
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make uv available in PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy project files
+COPY agents/pyproject.toml ./agents/
+COPY agents/uv.lock ./agents/
+
+WORKDIR /app/agents
+
+# Install dependencies with uv
+RUN uv sync --frozen
+
+# Copy the rest of the application
+COPY agents .
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8123
+
+# Run LangGraph dev server using venv python
+CMD [".venv/bin/python", "-m", "langgraph_cli", "dev", "--port", "8123", "--host", "0.0.0.0", "--no-browser"]
