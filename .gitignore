@@ -63,3 +63,7 @@ __pycache__/
 
 # Tools
 .claude
+
+# Tokens
+credentials.json
+*_token.json
