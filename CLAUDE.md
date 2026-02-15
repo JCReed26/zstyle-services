@@ -37,7 +37,7 @@ This is a **Turborepo monorepo** with four services:
 │       ├── server-utils.ts          # HTTP transport utils
 │       ├── src/                     # React widget components
 │       └── package.json
-├── Memory/                          # CaviraOSS/OpenMemory (git submodule)
+├── open_memory/                     # CaviraOSS/OpenMemory (git submodule)
 ├── Docker/                          # Dockerfiles
 │   ├── Dockerfile.agent
 │   ├── Dockerfile.app

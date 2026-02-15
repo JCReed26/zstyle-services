@@ -52,7 +52,7 @@ zstyle-frontend/
 │       ├── server.ts
 │       ├── package.json
 │       └── ...
-├── Memory/                → CaviraOSS/OpenMemory service (NEW)
+├── open_memory/                → CaviraOSS/OpenMemory service (NEW)
 │   └── (cloned/configured OpenMemory source)
 ├── Docker/
 │   ├── Dockerfile.agent
@@ -93,14 +93,14 @@ zstyle-frontend/
 
 ### Step 3: Add CaviraOSS/OpenMemory as Memory service
 **What:**
-- Create `Memory/` directory
+- Create `open_memory/` directory
 - Clone CaviraOSS/OpenMemory or add as git submodule
 - OpenMemory runs on port **8080**, dashboard UI included, MCP endpoint at `/mcp`
 - Uses SQLite by default (zero config)
 - Configure to use Gemini embeddings (avoids OpenAI cost)
 **New files:**
-- `Memory/` — OpenMemory source
-- `Docker/Dockerfile.memory` — builds OpenMemory
+- `open_memory/` — OpenMemory source
+- `Docker/Dockerfile.openmemory` — builds OpenMemory
 **Git commit:** `"feat: add CaviraOSS/OpenMemory as Memory service"`
 
 ### Step 4: Switch agent from OpenAI to Google Gemini

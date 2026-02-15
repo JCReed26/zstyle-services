@@ -3,7 +3,7 @@ version: '3.8'
 services:
   memory:
     build:
-      context: ./Memory/packages/openmemory-js
+      context: ./open_memory/packages/openmemory-js
       dockerfile: Dockerfile
     ports:
       - "8080:8080"

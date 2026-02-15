@@ -6,7 +6,7 @@ AI-powered monorepo with CopilotKit frontend, LangGraph agent (Gemini), persiste
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Apps/       │────▶│  Agents/     │────▶│  Memory/     │
+│  Apps/       │────▶│  Agents/     │────▶│  open_memory │
 │  Next.js 16  │     │  LangGraph   │     │  OpenMemory  │
 │  port 3000   │     │  port 8123   │     │  port 8080   │
 └─────────────┘     └──────┬───────┘     └──────────────┘
@@ -26,7 +26,7 @@ AI-powered monorepo with CopilotKit frontend, LangGraph agent (Gemini), persiste
 ├── Apps/            → Next.js 16 + CopilotKit frontend
 ├── MCP/             → MCP servers (add new ones here)
 │   └── threejs/     → Three.js 3D visualization MCP
-├── Memory/          → CaviraOSS/OpenMemory (git submodule)
+├── open_memory/          → CaviraOSS/OpenMemory (git submodule)
 ├── Docker/          → Dockerfiles for all services
 ├── docker-compose.yml
 ├── package.json     → pnpm monorepo root
@@ -70,7 +70,7 @@ cd Agents && uv run langgraph dev --port 8123 --no-browser
 | `app` | 3000 | Next.js frontend with CopilotKit chat + canvas |
 | `agent` | 8123 | LangGraph agent with Gemini LLM |
 | `mcp-threejs` | 3108 | Three.js 3D visualization MCP server |
-| `memory` | 8080 | OpenMemory persistent memory + MCP |
+| `open_memory` | 8080 | OpenMemory persistent memory + MCP |
 
 ## Adding a New MCP Server
 
