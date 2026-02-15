@@ -18,7 +18,7 @@ importers:
         specifier: ^2.5.4
         version: 2.8.3
 
-  Apps:
+  apps:
     dependencies:
       '@ag-ui/mcp-apps-middleware':
         specifier: ^0.0.3
@@ -82,7 +82,7 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
 
-  MCP/threejs:
+  mcp/threejs:
     dependencies:
       '@modelcontextprotocol/ext-apps':
         specifier: ^0.4.0

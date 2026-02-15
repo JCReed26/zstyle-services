@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PATH="/root/.local/bin:$PATH"
 
 # Copy project files
-COPY Agents/pyproject.toml ./Agents/
-COPY Agents/uv.lock ./Agents/ 2>/dev/null || true
+COPY agents/pyproject.toml ./agents/
+COPY agents/uv.lock ./agents/
 
-WORKDIR /app/Agents
+WORKDIR /app/agents
 
 # Install dependencies with uv
 RUN uv sync --frozen
@@ -25,7 +25,7 @@ RUN uv sync --frozen
 RUN /root/.local/bin/uv pip install langgraph-cli
 
 # Copy the rest of the application
-COPY Agents .
+COPY agents .
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

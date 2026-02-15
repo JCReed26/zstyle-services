@@ -12,7 +12,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY Apps/package.json ./Apps/
+COPY apps/package.json ./apps/
 COPY turbo.json ./
 
 # Install dependencies
@@ -24,7 +24,7 @@ WORKDIR /app
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/Apps/node_modules ./Apps/node_modules
+COPY --from=deps /app/apps/node_modules ./apps/node_modules
 
 # Copy source code
 COPY . .
@@ -45,9 +45,9 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy built application
-COPY --from=builder /app/Apps/public ./Apps/public
-COPY --from=builder --chown=nextjs:nodejs /app/Apps/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/Apps/.next/static ./Apps/.next/static
+COPY --from=builder /app/apps/public ./apps/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/.next/static ./apps/.next/static
 
 USER nextjs
 
@@ -56,4 +56,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "Apps/server.js"]
+CMD ["node", "apps/server.js"]
