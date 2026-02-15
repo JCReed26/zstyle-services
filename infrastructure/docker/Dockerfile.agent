@@ -21,9 +21,6 @@ WORKDIR /app/agents
 # Install dependencies with uv
 RUN uv sync --frozen
 
-# Install LangGraph CLI globally
-RUN /root/.local/bin/uv pip install langgraph-cli
-
 # Copy the rest of the application
 COPY agents .
 
@@ -31,5 +28,5 @@ COPY agents .
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8123
 
-# Run LangGraph dev server
-CMD ["/root/.local/bin/uv", "run", "langgraph", "dev", "--port", "8123", "--host", "0.0.0.0", "--no-browser"]
+# Run LangGraph dev server using venv python
+CMD [".venv/bin/python", "-m", "langgraph_cli", "dev", "--port", "8123", "--host", "0.0.0.0", "--no-browser"]

@@ -6,21 +6,22 @@ AI-powered monorepo: CopilotKit frontend, LangGraph agent (Gemini), persistent m
 
 ## Architecture
 
-This is a **Turborepo monorepo** with four services:
+This is a **Turborepo monorepo** with three services:
 
 ### Repository Structure
 
 ```
 /
-├── agents/                          # Python LangGraph agent
-│   ├── main.py                      # Agent entry point (Gemini + MCP clients)
+├── agents/                          # 🎯 PRIMARY: AI Engineering Focus
+│   ├── main.py                      # Agent entry point (2 endpoints)
 │   ├── pyproject.toml               # Python deps (uv)
-│   ├── langgraph.json               # LangGraph config
+│   ├── langgraph.json               # LangGraph config (2 endpoints)
+│   ├── README.md                    # Agent development guide
 │   └── src/
-│       ├── todos.py                 # Todo tools and AgentState schema
-│       ├── query.py                 # Data query tool
-│       └── db.csv                   # Sample data
-├── Apps/                            # Next.js 16 frontend
+│       └── agents/                  # Agent graph definitions
+│           ├── exec_func_coach/     # Executive function coach with OpenMemory
+│           └── personal_assistant/ # Connections assistant (basic chat)
+├── frontend/                        # 🎨 SUPPORTING: UI Layer
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── page.tsx             # Main page
@@ -31,43 +32,38 @@ This is a **Turborepo monorepo** with four services:
 │   │   │   └── generative-ui/       # Generative UI components
 │   │   └── hooks/                   # CopilotKit hooks
 │   └── package.json
-├── mcp/                             # MCP servers (add new ones as subdirs)
-│   └── threejs/                     # Three.js 3D visualization MCP
-│       ├── server.ts                # MCP server entry
-│       ├── server-utils.ts          # HTTP transport utils
-│       ├── src/                     # React widget components
-│       └── package.json
-├── open_memory/                     # CaviraOSS/OpenMemory (git submodule)
-├── docker/                          # Dockerfiles
-│   ├── Dockerfile.agent
-│   ├── Dockerfile.app
-│   └── Dockerfile.mcp-threejs
-├── docker-compose.yml               # 4 services: memory, agent, mcp-threejs, app
+├── mcp/                             # 🔌 MCP SERVERS: Extensible Tools
+│   ├── README.md                    # MCP development guide
+│   └── open_memory/                 # OpenMemory persistent memory MCP (git submodule)
+├── infrastructure/                  # 🔧 SUPPORTING: Services
+│   └── docker/                      # Dockerfiles
+│       ├── Dockerfile.agent
+│       └── Dockerfile.app
+├── docker-compose.yml               # 3 services: memory, agent, app
 ├── package.json                     # pnpm monorepo root with Turborepo
-├── pnpm-workspace.yaml              # "apps/", "mcp/*"
+├── pnpm-workspace.yaml              # "frontend/", "mcp/*"
 └── turbo.json
 ```
 
-## Key Pattern: Agent State with CopilotKit v2
+## Agents
 
-State lives in the agent backend and syncs bidirectionally with the frontend.
+Two simple chatbot agents:
 
-1. **Agent defines state** (`agents/src/todos.py`): `AgentState(TypedDict)` with `todos: list[Todo]`
-2. **Agent modifies state** via `manage_todos` tool → `Command(update={"todos": ...})`
-3. **Frontend reads** via `useAgent()` hook → `agent.state.todos`
-4. **Frontend writes** via `agent.setState({ todos: ... })`
+1. **exec_func_coach**: Executive function coach with OpenMemory MCP for persistent context
+2. **personal_assistant**: Basic connections assistant (no MCP)
 
-## Agent Configuration
+## Configuration
 
 - **LLM**: Google Gemini (`gemini-2.0-flash` default, configurable via `GEMINI_MODEL`)
-- **MCP Clients**: CopilotKit MCP (generative UI) + OpenMemory MCP (persistent memory)
-- **Tools**: `manage_todos`, `get_todos`, `query_data`, + MCP tools
+- **Endpoints**: `exec_func_coach`, `personal_assistant`
+- **Frontend**: Connects to `exec_func_coach` endpoint
+- **MCP**: OpenMemory persistent memory (connected to exec_func_coach only)
 
 ## Development
 
 ```bash
 pnpm install          # Install JS dependencies
-pnpm dev              # Start frontend + MCP servers
+pnpm dev              # Start frontend
 cd agents && uv run langgraph dev --port 8123 --no-browser  # Start agent
 
 # Or with Docker:
@@ -79,8 +75,7 @@ docker compose up --build
 | Service | Port | Tech |
 |---------|------|------|
 | app | 3000 | Next.js 16, CopilotKit v2 |
-| agent | 8123 | LangGraph, Gemini |
-| mcp-threejs | 3108 | Three.js MCP server |
+| agent | 8123 | LangGraph, Gemini (2 endpoints) |
 | memory | 8080 | OpenMemory (SQLite + Gemini embeddings) |
 
 ## Environment

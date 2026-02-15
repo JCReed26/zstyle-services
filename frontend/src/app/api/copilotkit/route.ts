@@ -10,7 +10,7 @@ import { aguiMiddleware } from "@/app/api/copilotkit/ag-ui-middleware";
 // 1. Define the agent connection to LangGraph
 const defaultAgent = new LangGraphAgent({
   deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123",
-  graphId: "sample_agent",
+  graphId: "exec_func_coach",
   langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
 });
 

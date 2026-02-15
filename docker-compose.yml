@@ -1,7 +1,7 @@
 services:
   memory:
     build:
-      context: ./open_memory/packages/openmemory-js
+      context: ./mcp/open_memory/packages/openmemory-js
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
@@ -29,7 +29,7 @@ services:
   agent:
     build:
       context: .
-      dockerfile: docker/Dockerfile.agent
+      dockerfile: infrastructure/docker/Dockerfile.agent
     ports:
       - "8123:8123"
     environment:
@@ -51,26 +51,14 @@ services:
       memory:
         condition: service_healthy
 
-  mcp-threejs:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-threejs
-    ports:
-      - "3108:3108"
-    environment:
-      - NODE_ENV=development
-    networks:
-      - copilotkit-network
-
   app:
     build:
       context: .
-      dockerfile: docker/Dockerfile.app
+      dockerfile: infrastructure/docker/Dockerfile.app
     ports:
       - "3000:3000"
     environment:
       - LANGGRAPH_DEPLOYMENT_URL=http://agent:8123
-      - MCP_SERVER_URL=http://mcp-threejs:3108/mcp
     networks:
       - copilotkit-network
     depends_on:
