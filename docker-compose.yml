@@ -31,7 +31,7 @@ services:
   agent:
     build:
       context: .
-      dockerfile: Docker/Dockerfile.agent
+      dockerfile: docker/Dockerfile.agent
     ports:
       - "8123:8123"
     environment:
@@ -48,7 +48,7 @@ services:
     networks:
       - copilotkit-network
     volumes:
-      - ./Agents:/app/Agents
+      - ./agents:/app/agents
     depends_on:
       memory:
         condition: service_healthy
@@ -56,7 +56,7 @@ services:
   mcp-threejs:
     build:
       context: .
-      dockerfile: Docker/Dockerfile.mcp-threejs
+      dockerfile: docker/Dockerfile.mcp-threejs
     ports:
       - "3108:3108"
     environment:
@@ -67,7 +67,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: Docker/Dockerfile.app
+      dockerfile: docker/Dockerfile.app
     ports:
       - "3000:3000"
     environment:

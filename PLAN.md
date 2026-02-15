@@ -38,27 +38,27 @@ zstyle-frontend/
 
 ```
 / (repo root)
-├── Agents/                → Python LangGraph agent (moved from apps/agent/)
+├── agents/                → Python LangGraph agent (moved from apps/agent/)
 │   ├── main.py
 │   ├── pyproject.toml
 │   ├── langgraph.json
 │   └── src/
-├── Apps/                  → Next.js CopilotKit frontend (moved from apps/app/)
+├── apps/                  → Next.js CopilotKit frontend (moved from apps/app/)
 │   ├── src/
 │   ├── package.json
 │   └── ...
-├── MCP/                   → Root-level MCP directory (scalable, add more servers here)
+├── mcp/                   → Root-level MCP directory (scalable, add more servers here)
 │   └── threejs/           → Three.js visualization MCP (moved from apps/mcp/)
 │       ├── server.ts
 │       ├── package.json
 │       └── ...
 ├── open_memory/                → CaviraOSS/OpenMemory service (NEW)
 │   └── (cloned/configured OpenMemory source)
-├── Docker/
+├── docker/
 │   ├── Dockerfile.agent
 │   ├── Dockerfile.app
 │   ├── Dockerfile.mcp-threejs
-│   └── Dockerfile.memory
+│   └── Dockerfile.openmemory
 ├── docker-compose.yml     → 4 services: agent, app, mcp-threejs, memory
 ├── package.json           → pnpm monorepo root (for JS packages)
 ├── pnpm-workspace.yaml    → workspace: "Apps/", "MCP/*"
@@ -67,7 +67,7 @@ zstyle-frontend/
 └── README.md
 ```
 
-**Why `MCP/*` glob in pnpm-workspace.yaml:** Every subdirectory under `MCP/` with a `package.json` becomes a workspace package automatically. To add a new MCP server later, just create `MCP/my-new-server/` with a `package.json` — no config changes needed.
+**Why `mcp/*` glob in pnpm-workspace.yaml:** Every subdirectory under `mcp/` with a `package.json` becomes a workspace package automatically. To add a new MCP server later, just create `mcp/my-new-server/` with a `package.json` — no config changes needed.
 
 ---
 
@@ -81,12 +81,12 @@ zstyle-frontend/
 ### Step 2: Rename directories to match target layout
 **What:**
 - `apps/app/` → `Apps/`
-- `apps/agent/` → `Agents/`
-- `apps/mcp/` → `MCP/threejs/`
-- `docker/` → `Docker/`
+- `apps/agent/` → `agents/`
+- `apps/mcp/` → `mcp/threejs/`
+- `docker/` → `docker/`
 - Remove empty `apps/` directory
 **Update:**
-- `pnpm-workspace.yaml` → `packages: ["Apps/", "MCP/*"]`
+- `pnpm-workspace.yaml` → `packages: ["apps/", "mcp/*"]`
 - `package.json` scripts → update turbo filter names to match new package names
 - Turbo config → no changes (task-based, not path-based)
 **Git commit:** `"restructure: rename to Agents/, Apps/, MCP/threejs/, Docker/"`
@@ -105,14 +105,14 @@ zstyle-frontend/
 
 ### Step 4: Switch agent from OpenAI to Google Gemini
 **What:**
-- In `Agents/pyproject.toml`: remove `openai`, `langchain-openai`; add `langchain-google-genai`; bump `langchain>=1.2.5`
-- In `Agents/main.py`: replace `model="gpt-5.2"` with Gemini model via `ChatGoogleGenerativeAI`
+- In `agents/pyproject.toml`: remove `openai`, `langchain-openai`; add `langchain-google-genai`; bump `langchain>=1.2.5`
+- In `agents/main.py`: replace `model="gpt-5.2"` with Gemini model via `ChatGoogleGenerativeAI`
 - In `.env.example`: replace `OPENAI_API_KEY` with `GOOGLE_API_KEY`
 **Git commit:** `"feat: switch agent LLM from OpenAI to Google Gemini"`
 
 ### Step 5: Connect agent to OpenMemory MCP
 **What:**
-- In `Agents/main.py`: add OpenMemory as a second MCP server in the `MultiServerMCPClient` config
+- In `agents/main.py`: add OpenMemory as a second MCP server in the `MultiServerMCPClient` config
 - The agent connects to `http://memory:8080/mcp` over Docker network
 - This gives the agent: `openmemory_query`, `openmemory_store`, `openmemory_list`, `openmemory_get`, `openmemory_reinforce`
 - Keep existing CopilotKit MCP connection alongside it
@@ -137,10 +137,10 @@ client = MultiServerMCPClient({
 - Update `agent` service: `GOOGLE_API_KEY` env, `OPENMEMORY_MCP_URL=http://memory:8080/mcp`, depends_on memory
 - Rename `mcp` → `mcp-threejs` for clarity (future MCPs will have their own names)
 - Update all Dockerfile COPY paths to match new directory names
-- `Docker/Dockerfile.agent` → paths from `Agents/`
-- `Docker/Dockerfile.app` → paths from `Apps/`
-- `Docker/Dockerfile.mcp-threejs` → paths from `MCP/threejs/`
-- `Docker/Dockerfile.memory` → new, builds OpenMemory
+- `docker/Dockerfile.agent` → paths from `agents/`
+- `docker/Dockerfile.app` → paths from `apps/`
+- `docker/Dockerfile.mcp-threejs` → paths from `mcp/threejs/`
+- `docker/Dockerfile.openmemory` → new, builds OpenMemory
 - All services on `copilotkit-network`
 **Service dependency chain:**
 ```
@@ -152,8 +152,8 @@ mcp-threejs (3108)  app (3000) depends_on agent (healthy)
 
 ### Step 7: Verify frontend networking over Docker
 **What:**
-- Verify `Apps/src/app/api/copilotkit/route.ts` uses `LANGGRAPH_DEPLOYMENT_URL` env var correctly (it does: `http://agent:8123`)
-- Verify `Apps/src/app/api/copilotkit/ag-ui-middleware.ts` uses `MCP_SERVER_URL` env var
+- Verify `apps/src/app/api/copilotkit/route.ts` uses `LANGGRAPH_DEPLOYMENT_URL` env var correctly (it does: `http://agent:8123`)
+- Verify `apps/src/app/api/copilotkit/ag-ui-middleware.ts` uses `MCP_SERVER_URL` env var
 - Verify docker-compose passes correct env vars to the app service
 - Fix if any references are stale after the move
 **Git commit (if changes needed):** `"fix: frontend Docker network configuration"`
@@ -162,7 +162,7 @@ mcp-threejs (3108)  app (3000) depends_on agent (healthy)
 **What:**
 - Rewrite `README.md`: QuickStart guide, architecture overview, service descriptions, how to add new MCP servers
 - Update `.env.example` with all required env vars
-- Update `Agents/langgraph.json` env path (was `../../.env`, now `../.env`)
+- Update `agents/langgraph.json` env path (was `../../.env`, now `../.env`)
 - Clean up stale `CLAUDE.md` path references
 - Update `.gitignore` if needed
 **Git commit:** `"docs: README, env config, and cleanup for new monorepo structure"`
@@ -197,4 +197,4 @@ LANGSMITH_API_KEY=
 4. **OpenMemory uses SQLite** by default — zero config, no extra DB service. Can switch to PostgreSQL later by adding a `db` service.
 5. **Agent keeps both MCP connections** — CopilotKit MCP (generative UI tools) + OpenMemory MCP (persistent memory).
 6. **Gemini model** — `gemini-2.0-flash` as default (fast, capable, generous free tier). Configurable via env var.
-7. **Agents/ is NOT a pnpm workspace** — it's Python-only (uv/pyproject.toml). pnpm workspaces only cover JS packages.
+7. **agents/ is NOT a pnpm workspace** — it's Python-only (uv/pyproject.toml). pnpm workspaces only cover JS packages.

@@ -12,7 +12,7 @@ This is a **Turborepo monorepo** with four services:
 
 ```
 /
-├── Agents/                          # Python LangGraph agent
+├── agents/                          # Python LangGraph agent
 │   ├── main.py                      # Agent entry point (Gemini + MCP clients)
 │   ├── pyproject.toml               # Python deps (uv)
 │   ├── langgraph.json               # LangGraph config
@@ -31,20 +31,20 @@ This is a **Turborepo monorepo** with four services:
 │   │   │   └── generative-ui/       # Generative UI components
 │   │   └── hooks/                   # CopilotKit hooks
 │   └── package.json
-├── MCP/                             # MCP servers (add new ones as subdirs)
+├── mcp/                             # MCP servers (add new ones as subdirs)
 │   └── threejs/                     # Three.js 3D visualization MCP
 │       ├── server.ts                # MCP server entry
 │       ├── server-utils.ts          # HTTP transport utils
 │       ├── src/                     # React widget components
 │       └── package.json
 ├── open_memory/                     # CaviraOSS/OpenMemory (git submodule)
-├── Docker/                          # Dockerfiles
+├── docker/                          # Dockerfiles
 │   ├── Dockerfile.agent
 │   ├── Dockerfile.app
 │   └── Dockerfile.mcp-threejs
 ├── docker-compose.yml               # 4 services: memory, agent, mcp-threejs, app
 ├── package.json                     # pnpm monorepo root with Turborepo
-├── pnpm-workspace.yaml              # "Apps/", "MCP/*"
+├── pnpm-workspace.yaml              # "apps/", "mcp/*"
 └── turbo.json
 ```
 
@@ -52,7 +52,7 @@ This is a **Turborepo monorepo** with four services:
 
 State lives in the agent backend and syncs bidirectionally with the frontend.
 
-1. **Agent defines state** (`Agents/src/todos.py`): `AgentState(TypedDict)` with `todos: list[Todo]`
+1. **Agent defines state** (`agents/src/todos.py`): `AgentState(TypedDict)` with `todos: list[Todo]`
 2. **Agent modifies state** via `manage_todos` tool → `Command(update={"todos": ...})`
 3. **Frontend reads** via `useAgent()` hook → `agent.state.todos`
 4. **Frontend writes** via `agent.setState({ todos: ... })`
@@ -68,7 +68,7 @@ State lives in the agent backend and syncs bidirectionally with the frontend.
 ```bash
 pnpm install          # Install JS dependencies
 pnpm dev              # Start frontend + MCP servers
-cd Agents && uv run langgraph dev --port 8123 --no-browser  # Start agent
+cd agents && uv run langgraph dev --port 8123 --no-browser  # Start agent
 
 # Or with Docker:
 docker compose up --build

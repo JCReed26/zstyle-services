@@ -6,13 +6,13 @@ AI-powered monorepo with CopilotKit frontend, LangGraph agent (Gemini), persiste
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Apps/       │────▶│  Agents/     │────▶│  open_memory │
+│  apps/       │────▶│  agents/     │────▶│  open_memory │
 │  Next.js 16  │     │  LangGraph   │     │  OpenMemory  │
 │  port 3000   │     │  port 8123   │     │  port 8080   │
 └─────────────┘     └──────┬───────┘     └──────────────┘
                            │
                     ┌──────▼───────┐
-                    │  MCP/threejs │
+                    │  mcp/threejs │
                     │  Three.js 3D │
                     │  port 3108   │
                     └──────────────┘
@@ -22,15 +22,15 @@ AI-powered monorepo with CopilotKit frontend, LangGraph agent (Gemini), persiste
 
 ```
 /
-├── Agents/          → Python LangGraph agent (Gemini-powered)
-├── Apps/            → Next.js 16 + CopilotKit frontend
-├── MCP/             → MCP servers (add new ones here)
+├── agents/          → Python LangGraph agent (Gemini-powered)
+├── apps/            → Next.js 16 + CopilotKit frontend
+├── mcp/             → MCP servers (add new ones here)
 │   └── threejs/     → Three.js 3D visualization MCP
 ├── open_memory/          → CaviraOSS/OpenMemory (git submodule)
-├── Docker/          → Dockerfiles for all services
+├── docker/          → Dockerfiles for all services
 ├── docker-compose.yml
 ├── package.json     → pnpm monorepo root
-└── pnpm-workspace.yaml  → "Apps/", "MCP/*"
+└── pnpm-workspace.yaml  → "apps/", "mcp/*"
 ```
 
 ## Quick Start
@@ -60,7 +60,7 @@ pnpm install
 pnpm dev
 
 # Start agent separately (requires Python 3.12+ and uv)
-cd Agents && uv run langgraph dev --port 8123 --no-browser
+cd agents && uv run langgraph dev --port 8123 --no-browser
 ```
 
 ## Services
@@ -74,9 +74,9 @@ cd Agents && uv run langgraph dev --port 8123 --no-browser
 
 ## Adding a New MCP Server
 
-1. Create `MCP/your-server/` with a `package.json`
-2. It auto-registers as a pnpm workspace (via `MCP/*` glob)
-3. Add a Dockerfile at `Docker/Dockerfile.mcp-your-server`
+1. Create `mcp/your-server/` with a `package.json`
+2. It auto-registers as a pnpm workspace (via `mcp/*` glob)
+3. Add a Dockerfile at `docker/Dockerfile.mcp-your-server`
 4. Add a service entry in `docker-compose.yml`
 
 ## Environment Variables
