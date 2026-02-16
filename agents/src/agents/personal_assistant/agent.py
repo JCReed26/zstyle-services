@@ -14,7 +14,8 @@ from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-from src.tools.calendar_tool import get_calendar_tools
+# TODO: Fix calendar tool - build_resource_service API changed
+# from src.tools.calendar_tool import get_calendar_tools
 from .prompt import prompt
 
 # Calendar Tools is also available as an agent for now we will use the tool directly
@@ -41,7 +42,7 @@ def create_personal_assistant_agent():
     # Simple chatbot
     agent = create_agent(
         model=model,
-        tools=[*get_mcp_tools(), *get_calendar_tools()],  # No special tools yet
+        tools=[*get_mcp_tools()],  # TODO: Add back calendar tools when API fixed
         system_prompt=prompt,
     )
 
