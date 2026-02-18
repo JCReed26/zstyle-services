@@ -26,6 +26,22 @@ services:
     networks:
       - copilotkit-network
 
+  strava-mcp:
+    build:
+      context: ./mcp/strava
+      dockerfile: Dockerfile
+    ports:
+      - "8124:8124"
+    environment:
+      - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
+      - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
+      - STRAVA_REDIRECT_URI=${STRAVA_REDIRECT_URI:-http://localhost:8124/strava/callback}
+      - STRAVA_TOKEN_PATH=/data/strava_token.json
+    volumes:
+      - strava_data:/data
+    networks:
+      - copilotkit-network
+
   agent:
     build:
       context: .
@@ -37,6 +53,10 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
       - OPENMEMORY_MCP_URL=http://memory:8080/mcp
+      - STRAVA_MCP_URL=http://strava-mcp:8124/sse
+      - GMAIL_TOKEN_PATH=/app/agents/gmail_token.json
+      - CALENDAR_TOKEN_PATH=/app/agents/calendar_token.json
+      - GOOGLE_CLIENT_SECRETS_PATH=/app/agents/credentials.json
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123/docs"]
       interval: 10s
@@ -50,6 +70,8 @@ services:
     depends_on:
       memory:
         condition: service_healthy
+      strava-mcp:
+        condition: service_started
 
   app:
     build:
@@ -71,4 +93,6 @@ networks:
 
 volumes:
   openmemory_data:
+    driver: local
+  strava_data:
     driver: local
