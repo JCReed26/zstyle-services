@@ -5,7 +5,8 @@
   "package_manager": "uv",
   "graphs": {
     "exec_func_coach": "./main.py:exec_func_coach_graph",
-    "personal_assistant": "./main.py:personal_assistant_graph"
+    "personal_assistant": "./main.py:personal_assistant_graph",
+    "health_agent": "./main.py:health_agent_graph"
   },
   "env": "../.env"
 }
