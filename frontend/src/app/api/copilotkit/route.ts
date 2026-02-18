@@ -7,24 +7,40 @@ import { LangGraphAgent } from "@copilotkit/runtime/langgraph";
 import { NextRequest } from "next/server";
 import { aguiMiddleware } from "@/app/api/copilotkit/ag-ui-middleware";
 
-// 1. Define the agent connection to LangGraph
-const defaultAgent = new LangGraphAgent({
-  deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123",
+const LANGGRAPH_URL = process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123";
+const LANGSMITH_KEY = process.env.LANGSMITH_API_KEY || "";
+
+// exec_func_coach — primary orchestrator with AG-UI middleware
+const execFuncCoachAgent = new LangGraphAgent({
+  deploymentUrl: LANGGRAPH_URL,
   graphId: "exec_func_coach",
-  langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
+  langsmithApiKey: LANGSMITH_KEY,
+});
+execFuncCoachAgent.use(...aguiMiddleware);
+
+// personal_assistant — email, calendar, task management
+const personalAssistantAgent = new LangGraphAgent({
+  deploymentUrl: LANGGRAPH_URL,
+  graphId: "personal_assistant",
+  langsmithApiKey: LANGSMITH_KEY,
 });
 
-// 2. Bind in middleware to the agent. For A2UI and MCP Apps.
-defaultAgent.use(...aguiMiddleware)
+// health_agent — fitness coach + nutritionist
+const healthAgentAgent = new LangGraphAgent({
+  deploymentUrl: LANGGRAPH_URL,
+  graphId: "health_agent",
+  langsmithApiKey: LANGSMITH_KEY,
+});
 
-// 3. Define the route and CopilotRuntime for the agent
 export const POST = async (req: NextRequest) => {
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     endpoint: "/api/copilotkit",
     serviceAdapter: new ExperimentalEmptyAdapter(),
     runtime: new CopilotRuntime({
       agents: {
-        default: defaultAgent,
+        exec_func_coach: execFuncCoachAgent,
+        personal_assistant: personalAssistantAgent,
+        health_agent: healthAgentAgent,
       },
     }),
   });

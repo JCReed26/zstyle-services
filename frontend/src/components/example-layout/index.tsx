@@ -1,64 +1,48 @@
 "use client";
 
-import { ReactNode, useState } from "react";
-import { ModeToggle } from "./mode-toggle";
-import { useFrontendTool } from "@copilotkit/react-core";
+import { useState } from "react";
+import { CopilotChat } from "@copilotkit/react-core/v2";
+import { useFrontendTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
+import { TabNav, AgentTab } from "@/components/tab-nav";
+import { CoachCanvas } from "@/components/canvas/coach-canvas";
+import { PersonalAssistantCanvas } from "@/components/canvas/personal-assistant-canvas";
+import { HealthCanvas } from "@/components/canvas/health-canvas";
 
-interface ExampleLayoutProps {
-  chatContent: ReactNode;
-  appContent: ReactNode;
-}
+const AGENT_GRAPH_IDS: Record<AgentTab, string> = {
+  coach: "exec_func_coach",
+  personal_assistant: "personal_assistant",
+  health: "health_agent",
+};
 
-export function ExampleLayout({
-  chatContent,
-  appContent,
-}: ExampleLayoutProps) {
-  const [mode, setMode] = useState<'chat' | 'app'>('chat');
-
-  useFrontendTool({
-    name: "enableAppMode",
-    description: "Enable app mode, make sure its open when interacting with todos.",
-    handler: async () => {
-      setMode('app');
-    },
-  });
+export function AppLayout() {
+  const [activeTab, setActiveTab] = useState<AgentTab>("coach");
 
   useFrontendTool({
-    name: "enableChatMode",
-    description: "Enable chat mode",
-    handler: async () => {
-      setMode('chat');
+    name: "switchTab",
+    description: "Switch the active tab to redirect the user to a specialized agent.",
+    parameters: z.object({ tab: z.enum(["coach", "personal_assistant", "health"]) }),
+    handler: async ({ tab }: { tab: AgentTab }) => {
+      setActiveTab(tab);
+      return `Switched to ${tab} tab`;
     },
   });
 
   return (
-    <div className="h-full flex flex-row">
-      <ModeToggle mode={mode} onModeChange={setMode} />
-
-      {/* Chat Content */}
-      <div
-        className={`max-h-full overflow-y-auto ${
-          mode === 'app'
-            ? 'w-1/3 px-6 max-lg:hidden' // Hide on mobile in app mode
-            : 'flex-1 max-lg:px-4'
-        }`}
-      >
-        {chatContent}
-      </div>
-
-      {/* State Panel */}
-      <div
-        className={`h-full overflow-hidden ${
-          mode === 'app'
-            ? 'w-2/3 max-lg:w-full border-l max-lg:border-l-0' // Full width on mobile
-            : 'w-0 border-l-0'
-        }`}
-      >
-        <div className="w-full lg:w-[66.666vw] h-full">
-          {appContent}
+    <div className="h-screen flex flex-col bg-gray-50">
+      <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 overflow-auto p-6">
+          {activeTab === "coach" && <CoachCanvas />}
+          {activeTab === "personal_assistant" && <PersonalAssistantCanvas />}
+          {activeTab === "health" && <HealthCanvas />}
+        </div>
+        <div className="w-96 border-l border-gray-200 bg-white flex flex-col">
+          <CopilotChat key={activeTab} agentId={AGENT_GRAPH_IDS[activeTab]} />
         </div>
       </div>
     </div>
   );
 }
+
+export { AppLayout as ExampleLayout };
