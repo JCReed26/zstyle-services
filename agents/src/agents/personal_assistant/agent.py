@@ -1,49 +1,71 @@
-"""Personal Assistant chatbot & Agentic Agent
+"""Personal Assistant — supervisor over email_manager, calendar_agent, task_agent"""
 
-This agent is a personal assistant to be triggered by the exec_func_coach agent.
-This agent controls multiple sub-agents each representing a different tool or service integrated.
-This agent is responsible for creating and delegating tasks to the sub-agents to complete the request.
-
-It is designed to handle all day to day productivity apps for the user. (Calendar, Email, Tasks, etc.)
-The goal is a custom sync across all apps for the user.
-"""
-
-import asyncio
 import os
-from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.graph import StateGraph, END
+from langchain.agents import create_agent
+from typing import TypedDict, Annotated
+import operator
 
-# TODO: Fix calendar tool - build_resource_service API changed
-# from src.tools.calendar_tool import get_calendar_tools
-from .prompt import prompt
+from .prompt import PERSONAL_ASSISTANT_PROMPT, EMAIL_MANAGER_PROMPT, CALENDAR_AGENT_PROMPT, TASK_AGENT_PROMPT
 
-# Calendar Tools is also available as an agent for now we will use the tool directly
 
-def get_mcp_tools():
-    """Get MCP Tools for agent"""
-    client = MultiServerMCPClient({
-        "openmemory": {
-            "transport": "http",
-            "url": os.environ.get("OPENMEMORY_MCP_URL", "http://localhost:8080/mcp"),
-        },
-    })
-    return asyncio.run(client.get_tools())
+class PersonalAssistantState(TypedDict):
+    messages: Annotated[list, operator.add]
+    calendar: list
+    emails: list
+    tasks: list
+    automations: list
+
 
 def create_personal_assistant_agent():
-    """Simple chatbot for managing connected tools"""
-
-    # Initialize LLM (no MCP connection)
     model = ChatGoogleGenerativeAI(
         model=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
         google_api_key=os.environ.get("GOOGLE_API_KEY"),
     )
 
-    # Simple chatbot
-    agent = create_agent(
-        model=model,
-        tools=[*get_mcp_tools()],  # TODO: Add back calendar tools when API fixed
-        system_prompt=prompt,
-    )
+    try:
+        from src.tools.gmail_tool import get_gmail_tools
+        gmail_tools = get_gmail_tools()
+    except Exception as e:
+        print(f"Warning: Gmail tools unavailable: {e}")
+        gmail_tools = []
 
-    return agent
+    try:
+        from src.tools.calendar_tool import get_calendar_tools
+        calendar_tools = get_calendar_tools()
+    except Exception as e:
+        print(f"Warning: Calendar tools unavailable: {e}")
+        calendar_tools = []
+
+    email_manager = create_agent(model=model, tools=gmail_tools, system_prompt=EMAIL_MANAGER_PROMPT)
+    calendar_agent = create_agent(model=model, tools=calendar_tools, system_prompt=CALENDAR_AGENT_PROMPT)
+    task_agent = create_agent(model=model, tools=[], system_prompt=TASK_AGENT_PROMPT)
+
+    def supervisor_router(state: PersonalAssistantState):
+        last_msg = state["messages"][-1].content.lower() if state["messages"] else ""
+        if any(kw in last_msg for kw in ["email", "gmail", "inbox", "send", "reply", "message"]):
+            return "email_manager"
+        if any(kw in last_msg for kw in ["calendar", "schedule", "event", "block", "meeting", "week"]):
+            return "calendar_agent"
+        if any(kw in last_msg for kw in ["task", "todo", "list", "reminder"]):
+            return "task_agent"
+        return "calendar_agent"
+
+    graph = StateGraph(PersonalAssistantState)
+    graph.add_node("supervisor", lambda state: state)
+    graph.add_node("email_manager", email_manager)
+    graph.add_node("calendar_agent", calendar_agent)
+    graph.add_node("task_agent", task_agent)
+
+    graph.set_entry_point("supervisor")
+    graph.add_conditional_edges("supervisor", supervisor_router, {
+        "email_manager": "email_manager",
+        "calendar_agent": "calendar_agent",
+        "task_agent": "task_agent",
+    })
+    graph.add_edge("email_manager", END)
+    graph.add_edge("calendar_agent", END)
+    graph.add_edge("task_agent", END)
+
+    return graph.compile()
