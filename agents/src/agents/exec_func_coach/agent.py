@@ -7,17 +7,20 @@ from copilotkit import CopilotKitMiddleware
 from langchain_mcp_adapters.client import MultiServerMCPClient
 import asyncio
 
-def create_exec_func_coach_agent():
-    """Simple chatbot with OpenMemory for persistent context"""
+from .prompt import prompt
 
-    # Connect to OpenMemory MCP
+def get_mcp_tools():
+    """Get MCP Tools for agent"""
     client = MultiServerMCPClient({
         "openmemory": {
             "transport": "http",
             "url": os.environ.get("OPENMEMORY_MCP_URL", "http://localhost:8080/mcp"),
         },
     })
-    mcp_tools = asyncio.run(client.get_tools())
+    return asyncio.run(client.get_tools())
+
+def create_exec_func_coach_agent():
+    """Simple chatbot with OpenMemory for persistent context"""
 
     # Initialize LLM
     model = ChatGoogleGenerativeAI(
@@ -28,10 +31,9 @@ def create_exec_func_coach_agent():
     # Simple chatbot
     agent = create_agent(
         model=model,
-        tools=mcp_tools,  # Only OpenMemory tools
+        tools=[*get_mcp_tools()],  # Only OpenMemory tools
         middleware=[CopilotKitMiddleware()],
-        system_prompt="""You are an Executive Function Coach assistant.
-Help users with task management, organization, and breaking down complex tasks into manageable steps."""
+        system_prompt=prompt,
     )
 
     return agent
