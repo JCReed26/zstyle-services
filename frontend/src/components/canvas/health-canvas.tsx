@@ -25,7 +25,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 export function HealthCanvas() {
-  const { agent } = useAgent();
+  const { agent } = useAgent({ agentId: "health_agent" });
   const health = agent.state?.health ?? { weekly_plan: [], strava_stats: null, meal_plan: null };
   const stravaStats: StravaStats | null = health.strava_stats ?? null;
   const weeklyPlan: WorkoutDay[] = health.weekly_plan ?? [];

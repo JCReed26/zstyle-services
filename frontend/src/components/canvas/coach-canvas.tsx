@@ -27,7 +27,7 @@ interface VisionBoard {
 }
 
 export function CoachCanvas() {
-  const { agent } = useAgent();
+  const { agent } = useAgent({ agentId: "exec_func_coach" });
   const visionBoard: VisionBoard = agent.state?.vision_board ?? {
     goals: [],
     habits: [],

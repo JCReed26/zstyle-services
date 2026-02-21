@@ -35,7 +35,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 export function PersonalAssistantCanvas() {
-  const { agent } = useAgent();
+  const { agent } = useAgent({ agentId: "personal_assistant" });
   const pa = agent.state?.personal_assistant ?? { calendar: [], emails: [], tasks: [], automations: [] };
   const emails: EmailSummary[] = pa.emails ?? [];
   const calendar: CalendarBlock[] = pa.calendar ?? [];

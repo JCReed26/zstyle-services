@@ -7,3 +7,8 @@ __pycache__/
 # python
 .venv/
 .langgraph_api/
+
+# tokens
+gmail_token.json
+calendar_token.json
+credentials.json
