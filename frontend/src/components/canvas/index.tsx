@@ -4,7 +4,7 @@ import { useAgent } from "@copilotkit/react-core/v2";
 import { TodoList } from "./todo-list";
 
 export function Canvas() {
-  const { agent } = useAgent();
+  const { agent } = useAgent({ agentId: "exec_func_coach" });
 
   return (
     <div className="h-full p-8 bg-gray-50">

@@ -13,13 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PATH="/root/.local/bin:$PATH"
 
 # Copy project files
-COPY agents/pyproject.toml ./agents/
-COPY agents/uv.lock ./agents/
+COPY agents/requirements.txt ./agents/
 
 WORKDIR /app/agents
 
-# Install dependencies with uv
-RUN uv sync --frozen
+# Install dependencies with uv (using pip interface for speed)
+RUN uv pip install --system -r requirements.txt
 
 # Copy the rest of the application
 COPY agents .
@@ -28,5 +27,5 @@ COPY agents .
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8123
 
-# Run LangGraph dev server using venv python
-CMD [".venv/bin/python", "-m", "langgraph_cli", "dev", "--port", "8123", "--host", "0.0.0.0", "--no-browser"]
+# Run LangGraph dev server using system python
+CMD ["python", "-m", "langgraph_cli", "dev", "--port", "8123", "--host", "0.0.0.0", "--no-browser"]

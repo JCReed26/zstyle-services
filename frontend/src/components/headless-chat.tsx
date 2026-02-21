@@ -2,7 +2,7 @@ import { useAgent } from "@copilotkit/react-core/v2";
 import { useCallback, useState } from "react";
 
 export const HeadlessChat = () => {
-    const { agent } = useAgent()
+    const { agent } = useAgent({ agentId: "exec_func_coach" })
     const [message, setMessage] = useState("")
 
     const sendMessage = useCallback((message: string) => {

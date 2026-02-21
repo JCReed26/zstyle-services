@@ -2,8 +2,8 @@
 
 import "./globals.css";
 
-import { CopilotKit } from "@copilotkit/react-core";
-import "@copilotkit/react-ui/v2/styles.css";
+import { CopilotKitProvider } from "@copilotkit/react-core/v2";
+import "@copilotkit/react-core/v2/styles.css";
 
 export default function RootLayout({
   children,
@@ -13,9 +13,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`antialiased`}>
-        <CopilotKit runtimeUrl="/api/copilotkit">
+        <CopilotKitProvider runtimeUrl="/api/copilotkit">
           {children}
-        </CopilotKit>
+        </CopilotKitProvider>
       </body>
     </html>
   );
