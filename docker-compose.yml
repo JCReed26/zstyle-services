@@ -55,7 +55,7 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
       - OPENMEMORY_MCP_URL=http://memory:8080/mcp
-      - STRAVA_MCP_URL=http://strava-mcp:8124/sse
+      - STRAVA_MCP_URL=http://strava-mcp:8124/sse/
       - GMAIL_TOKEN_PATH=/app/agents/gmail_token.json
       - CALENDAR_TOKEN_PATH=/app/agents/calendar_token.json
       - GOOGLE_CLIENT_SECRETS_PATH=/app/agents/credentials.json

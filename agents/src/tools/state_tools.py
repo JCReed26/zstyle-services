@@ -1,26 +1,28 @@
 from typing import List, Optional, Any
 from langchain.tools import tool
+from langchain_core.runnables import RunnableConfig
 from src.state import Goal, Habit, CalendarBlock, EmailSummary, Task, Automation, WorkoutDay, StravaStats, MealPlan
 try:
     from copilotkit.langgraph import copilotkit_emit_state
 except ImportError:
     # Fallback or mock for environments where copilotkit is not available
-    def copilotkit_emit_state(state: Any):
+    async def copilotkit_emit_state(config: RunnableConfig, state: Any):
         pass
 
 # --- Vision Board Tools ---
 @tool
-def update_vision_board(goals: List[Goal], habits: List[Habit], lifestyle_theme: str = "My Lifestyle"):
+async def update_vision_board(goals: List[Goal], habits: List[Habit], config: RunnableConfig, lifestyle_theme: str = "My Lifestyle"):
     """
     Update the user's vision board (goals, habits, theme).
     Call this tool whenever you need to create, modify, or delete goals/habits or update the theme.
     """
-    copilotkit_emit_state({"vision_board": {"goals": goals, "habits": habits, "lifestyle_theme": lifestyle_theme}})
+    await copilotkit_emit_state(config, {"vision_board": {"goals": goals, "habits": habits, "lifestyle_theme": lifestyle_theme}})
     return "Vision board updated."
 
 # --- Personal Assistant Tools ---
 @tool
-def update_personal_assistant(
+async def update_personal_assistant(
+    config: RunnableConfig,
     calendar: Optional[List[CalendarBlock]] = None,
     emails: Optional[List[EmailSummary]] = None,
     tasks: Optional[List[Task]] = None,
@@ -41,13 +43,14 @@ def update_personal_assistant(
         updates["automations"] = automations
     
     if updates:
-        copilotkit_emit_state({"personal_assistant": updates})
+        await copilotkit_emit_state(config, {"personal_assistant": updates})
         return "Personal Assistant dashboard updated."
     return "No updates provided."
 
 # --- Health Agent Tools ---
 @tool
-def update_health(
+async def update_health(
+    config: RunnableConfig,
     weekly_plan: Optional[List[WorkoutDay]] = None,
     strava_stats: Optional[StravaStats] = None,
     meal_plan: Optional[MealPlan] = None,
@@ -68,6 +71,6 @@ def update_health(
         updates["shopping_list"] = shopping_list
         
     if updates:
-        copilotkit_emit_state({"health": updates})
+        await copilotkit_emit_state(config, {"health": updates})
         return "Health dashboard updated."
     return "No updates provided."

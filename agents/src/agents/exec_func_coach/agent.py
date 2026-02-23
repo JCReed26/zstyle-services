@@ -9,8 +9,10 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.tools import tool
 from langchain.agents import create_agent
 from copilotkit import CopilotKitMiddleware
+from copilotkit.langgraph import CopilotKitState
 
 from src.state import VisionBoardState, Goal, Habit
+from src.tools.state_tools import update_vision_board
 from .prompt import EXEC_FUNC_COACH_PROMPT
 
 LANGGRAPH_URL = os.environ.get("LANGGRAPH_DEPLOYMENT_URL", "http://localhost:8123")
@@ -58,17 +60,6 @@ async def request_health_agent(task: str) -> str:
     return f"Health Agent completed task: {result}"
 
 
-@tool
-def update_vision_board(goals: List[Goal], habits: List[Habit], lifestyle_theme: str = "My Lifestyle"):
-    """
-    Update the user's vision board (goals, habits, theme).
-    Call this tool whenever you need to create, modify, or delete goals/habits or update the theme.
-    """
-    # This function is just for the tool definition/schema for the LLM.
-    # The actual state update happens via CopilotKit state sync or handled by the middleware logic.
-    return "Vision board updated."
-
-
 async def get_mcp_tools():
     try:
         client = MultiServerMCPClient({
@@ -102,6 +93,7 @@ def create_exec_func_coach_agent():
         tools=tools,
         middleware=[CopilotKitMiddleware()],
         system_prompt=EXEC_FUNC_COACH_PROMPT,
+        state_schema=CopilotKitState,
     )
     
     return agent

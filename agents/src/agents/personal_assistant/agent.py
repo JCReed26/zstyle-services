@@ -4,15 +4,14 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langchain.agents import create_agent
-from typing import TypedDict, Annotated
-import operator
+from copilotkit import CopilotKitMiddleware
+from copilotkit.langgraph import CopilotKitState
 
 from .prompt import PERSONAL_ASSISTANT_PROMPT, EMAIL_MANAGER_PROMPT, CALENDAR_AGENT_PROMPT, TASK_AGENT_PROMPT
 from src.tools.state_tools import update_personal_assistant
 
 
-class PersonalAssistantState(TypedDict):
-    messages: Annotated[list, operator.add]
+class PersonalAssistantState(CopilotKitState):
     calendar: list
     emails: list
     tasks: list
@@ -40,9 +39,9 @@ def create_personal_assistant_agent():
         calendar_tools = []
 
     # Provide update_personal_assistant tool to all sub-agents
-    email_manager = create_agent(model=model, tools=gmail_tools + [update_personal_assistant], system_prompt=EMAIL_MANAGER_PROMPT)
-    calendar_agent = create_agent(model=model, tools=calendar_tools + [update_personal_assistant], system_prompt=CALENDAR_AGENT_PROMPT)
-    task_agent = create_agent(model=model, tools=[update_personal_assistant], system_prompt=TASK_AGENT_PROMPT)
+    email_manager = create_agent(model=model, tools=gmail_tools + [update_personal_assistant], system_prompt=EMAIL_MANAGER_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
+    calendar_agent = create_agent(model=model, tools=calendar_tools + [update_personal_assistant], system_prompt=CALENDAR_AGENT_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
+    task_agent = create_agent(model=model, tools=[update_personal_assistant], system_prompt=TASK_AGENT_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
 
     def supervisor_router(state: PersonalAssistantState):
         if not state["messages"]:
