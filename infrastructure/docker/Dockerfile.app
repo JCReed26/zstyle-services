@@ -30,7 +30,8 @@ COPY frontend ./frontend
 COPY turbo.json ./
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-CMD ["pnpm", "dev:app"]
+# Write Docker env vars to .env.local so Next.js/Turbopack can read them
+CMD sh -c 'echo "LANGGRAPH_DEPLOYMENT_URL=$LANGGRAPH_DEPLOYMENT_URL" > /app/frontend/.env.local && echo "LANGSMITH_API_KEY=$LANGSMITH_API_KEY" >> /app/frontend/.env.local && pnpm dev:app'
 
 # Build the application
 FROM base AS builder
