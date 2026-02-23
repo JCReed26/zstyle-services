@@ -37,8 +37,15 @@ export function AppLayout() {
           {activeTab === "personal_assistant" && <PersonalAssistantCanvas />}
           {activeTab === "health" && <HealthCanvas />}
         </div>
-        <div className="w-96 border-l border-gray-200 bg-white flex flex-col">
-          <CopilotChat key={activeTab} agentId={AGENT_GRAPH_IDS[activeTab]} />
+        <div className="w-96 border-l border-gray-200 bg-white flex flex-col relative">
+          {(Object.keys(AGENT_GRAPH_IDS) as AgentTab[]).map((tab) => (
+            <div
+              key={tab}
+              className={`flex-1 flex flex-col ${activeTab === tab ? "h-full" : "hidden h-0"}`}
+            >
+              <CopilotChat agentId={AGENT_GRAPH_IDS[tab]} />
+            </div>
+          ))}
         </div>
       </div>
     </div>

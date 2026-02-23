@@ -6,6 +6,8 @@ const LANGGRAPH_URL =
   process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123";
 const LANGSMITH_KEY = process.env.LANGSMITH_API_KEY || "";
 
+console.log("[copilotkit] Using LangGraph URL:", LANGGRAPH_URL);
+
 const runtime = new CopilotRuntime({
   agents: {
     exec_func_coach: new LangGraphAgent({

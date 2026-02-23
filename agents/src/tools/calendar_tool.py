@@ -14,7 +14,11 @@ def get_calendar_tools():
     """
     try:
         from langchain_google_community import CalendarToolkit
-        from langchain_google_community.calendar.utils import get_google_credentials, build_resource_service
+        try:
+            from langchain_google_community.calendar.utils import get_google_credentials, build_resource_service
+        except ImportError:
+            # Handle potential typo in library version
+            from langchain_google_community.calendar.utils import get_google_credentials, build_resouce_service as build_resource_service
 
         token_path = os.environ.get("CALENDAR_TOKEN_PATH", "calendar_token.json")
         secrets_path = os.environ.get("GOOGLE_CLIENT_SECRETS_PATH", "credentials.json")

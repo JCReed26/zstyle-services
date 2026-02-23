@@ -4,14 +4,14 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langchain.agents import create_agent
-from typing import TypedDict, Annotated
-import operator
+from copilotkit import CopilotKitMiddleware
+from copilotkit.langgraph import CopilotKitState
 
 from .prompt import PERSONAL_ASSISTANT_PROMPT, EMAIL_MANAGER_PROMPT, CALENDAR_AGENT_PROMPT, TASK_AGENT_PROMPT
+from src.tools.state_tools import update_personal_assistant
 
 
-class PersonalAssistantState(TypedDict):
-    messages: Annotated[list, operator.add]
+class PersonalAssistantState(CopilotKitState):
     calendar: list
     emails: list
     tasks: list
@@ -38,17 +38,24 @@ def create_personal_assistant_agent():
         print(f"Warning: Calendar tools unavailable: {e}")
         calendar_tools = []
 
-    email_manager = create_agent(model=model, tools=gmail_tools, system_prompt=EMAIL_MANAGER_PROMPT)
-    calendar_agent = create_agent(model=model, tools=calendar_tools, system_prompt=CALENDAR_AGENT_PROMPT)
-    task_agent = create_agent(model=model, tools=[], system_prompt=TASK_AGENT_PROMPT)
+    # Provide update_personal_assistant tool to all sub-agents
+    email_manager = create_agent(model=model, tools=gmail_tools + [update_personal_assistant], system_prompt=EMAIL_MANAGER_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
+    calendar_agent = create_agent(model=model, tools=calendar_tools + [update_personal_assistant], system_prompt=CALENDAR_AGENT_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
+    task_agent = create_agent(model=model, tools=[update_personal_assistant], system_prompt=TASK_AGENT_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
 
     def supervisor_router(state: PersonalAssistantState):
-        last_msg = state["messages"][-1].content.lower() if state["messages"] else ""
-        if any(kw in last_msg for kw in ["email", "gmail", "inbox", "send", "reply", "message"]):
-            return "email_manager"
-        if any(kw in last_msg for kw in ["calendar", "schedule", "event", "block", "meeting", "week"]):
+        if not state["messages"]:
             return "calendar_agent"
-        if any(kw in last_msg for kw in ["task", "todo", "list", "reminder"]):
+        
+        last_msg = state["messages"][-1]
+        content = last_msg.content if hasattr(last_msg, "content") else last_msg.get("content", "")
+        content = content.lower()
+        
+        if any(kw in content for kw in ["email", "gmail", "inbox", "send", "reply", "message"]):
+            return "email_manager"
+        if any(kw in content for kw in ["calendar", "schedule", "event", "block", "meeting", "week"]):
+            return "calendar_agent"
+        if any(kw in content for kw in ["task", "todo", "list", "reminder"]):
             return "task_agent"
         return "calendar_agent"
 

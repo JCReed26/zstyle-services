@@ -19,11 +19,20 @@ def get_gmail_tools():
         token_path = os.environ.get("GMAIL_TOKEN_PATH", "gmail_token.json")
         secrets_path = os.environ.get("GOOGLE_CLIENT_SECRETS_PATH", "credentials.json")
 
-        credentials = get_gmail_credentials(
-            token_file=token_path,
-            client_secrets_file=secrets_path,
-            scopes=GMAIL_SCOPES,
-        )
+        # Handle potential typo in library version
+        try:
+             credentials = get_gmail_credentials(
+                token_file=token_path,
+                client_secrets_file=secrets_path,
+                scopes=GMAIL_SCOPES,
+            )
+        except TypeError:
+             # Try with typo
+             credentials = get_gmail_credentials(
+                token_file=token_path,
+                client_sercret_file=secrets_path,
+                scopes=GMAIL_SCOPES,
+            )
         service = build_resource_service(credentials=credentials)
         toolkit = GmailToolkit(api_resource=service)
         return toolkit.get_tools()

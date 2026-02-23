@@ -18,6 +18,21 @@ COPY turbo.json ./
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
+# Development image
+FROM deps AS dev
+WORKDIR /app
+
+ENV NODE_ENV=development
+ENV WATCHPACK_POLLING=true
+
+# Copy source code
+COPY frontend ./frontend
+COPY turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Write Docker env vars to .env.local so Next.js/Turbopack can read them
+CMD sh -c 'echo "LANGGRAPH_DEPLOYMENT_URL=$LANGGRAPH_DEPLOYMENT_URL" > /app/frontend/.env.local && echo "LANGSMITH_API_KEY=$LANGSMITH_API_KEY" >> /app/frontend/.env.local && pnpm dev:app'
+
 # Build the application
 FROM base AS builder
 WORKDIR /app
@@ -27,7 +42,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 
 # Copy source code
-COPY . .
+COPY frontend ./frontend
+COPY turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate

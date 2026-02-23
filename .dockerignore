@@ -1,71 +1,41 @@
 # Dependencies
 node_modules
+**/node_modules
 .pnp
 .pnp.js
 
 # Python
 __pycache__
+**/__pycache__
 *.py[cod]
 *$py.class
 .Python
 env/
 venv/
 .venv
-pip-log.txt
-pip-delete-this-directory.txt
-.pytest_cache
-
-# Testing
-coverage
-*.lcov
-.nyc_output
+**/.venv
 
 # Build outputs
-.next/
-out/
-dist/
-build/
+.next
+**/.next
+dist
+**/dist
+build
+**/build
 *.tsbuildinfo
 
-# Environment
-.env
-.env*.local
-.env.production
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
-
-# OS
-.DS_Store
-*.pem
-Thumbs.db
-
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
-*~
-
-# Git
+# IDE & Git
 .git
 .gitignore
 .gitattributes
+.vscode
+.idea
+.cursor
+terminals
+.claude
+*.log
+.DS_Store
 
-# Documentation
-*.md
-!README.md
-
-# Turbo
-.turbo
-
-# Misc
-.cache
-tmp
-temp
+# Monorepo irrelevant folders for App build
+# (These are ignored by root context builds like 'app' to keep context small)
+mcp/
