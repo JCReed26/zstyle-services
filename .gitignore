@@ -67,3 +67,5 @@ __pycache__/
 # Tokens
 credentials.json
 *_token.json
+
+.env

@@ -4,7 +4,7 @@ services:
       context: ./mcp/open_memory/packages/openmemory-js
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - OM_PORT=8080
       - OM_TIER=smart
@@ -31,7 +31,7 @@ services:
       context: ./mcp/strava
       dockerfile: Dockerfile
     ports:
-      - "8124:8124"
+      - "127.0.0.1:8124:8124"
     environment:
       - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
       - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
@@ -47,7 +47,9 @@ services:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.agent
     ports:
-      - "8123:8123"
+      - "127.0.0.1:8123:8123"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
@@ -77,10 +79,18 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.app
+      target: dev
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - LANGGRAPH_DEPLOYMENT_URL=http://agent:8123
+    volumes:
+      - ./frontend:/app/frontend
+      - ./package.json:/app/package.json
+      - ./turbo.json:/app/turbo.json
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - /app/node_modules
+      - /app/frontend/node_modules
     networks:
       - copilotkit-network
     depends_on:

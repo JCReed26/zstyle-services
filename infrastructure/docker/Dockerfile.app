@@ -18,6 +18,20 @@ COPY turbo.json ./
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
+# Development image
+FROM deps AS dev
+WORKDIR /app
+
+ENV NODE_ENV=development
+ENV WATCHPACK_POLLING=true
+
+# Copy source code
+COPY frontend ./frontend
+COPY turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+CMD ["pnpm", "dev:app"]
+
 # Build the application
 FROM base AS builder
 WORKDIR /app
@@ -27,7 +41,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 
 # Copy source code
-COPY . .
+COPY frontend ./frontend
+COPY turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate

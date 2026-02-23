@@ -10,6 +10,7 @@ from typing import TypedDict, Annotated
 import operator
 
 from .prompt import HEALTH_SYSTEM_PROMPT, FITNESS_COACH_PROMPT, NUTRITIONIST_PROMPT
+from src.tools.state_tools import update_health
 
 
 class HealthState(TypedDict):
@@ -40,12 +41,20 @@ def create_health_agent():
     )
 
     strava_tools = get_strava_tools()
-    fitness_coach = create_agent(model=model, tools=strava_tools, system_prompt=FITNESS_COACH_PROMPT)
-    nutritionist = create_agent(model=model, tools=[], system_prompt=NUTRITIONIST_PROMPT)
+    
+    # Provide update_health tool to sub-agents
+    fitness_coach = create_agent(model=model, tools=strava_tools + [update_health], system_prompt=FITNESS_COACH_PROMPT)
+    nutritionist = create_agent(model=model, tools=[update_health], system_prompt=NUTRITIONIST_PROMPT)
 
     def supervisor_router(state: HealthState):
-        last_msg = state["messages"][-1].content.lower() if state["messages"] else ""
-        if any(kw in last_msg for kw in ["meal", "diet", "nutrition", "food", "recipe", "eat"]):
+        if not state["messages"]:
+            return "fitness_coach"
+            
+        last_msg = state["messages"][-1]
+        content = last_msg.content if hasattr(last_msg, "content") else last_msg.get("content", "")
+        content = content.lower()
+        
+        if any(kw in content for kw in ["meal", "diet", "nutrition", "food", "recipe", "eat"]):
             return "nutritionist"
         return "fitness_coach"  # default
 
