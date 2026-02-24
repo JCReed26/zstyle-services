@@ -3,9 +3,8 @@
 import os
 import asyncio
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langgraph.graph import StateGraph, END
 from langchain.agents import create_agent
+from langgraph.graph import StateGraph, END
 from copilotkit import CopilotKitMiddleware
 from copilotkit.langgraph import CopilotKitState
 
@@ -21,6 +20,7 @@ class HealthState(CopilotKitState):
 
 def get_strava_tools():
     try:
+        from langchain_mcp_adapters.client import MultiServerMCPClient
         client = MultiServerMCPClient({
             "strava": {
                 "transport": "http",
@@ -40,19 +40,19 @@ def create_health_agent():
     )
 
     strava_tools = get_strava_tools()
-    
+
     # Provide update_health tool to sub-agents
-    fitness_coach = create_agent(model=model, tools=strava_tools + [update_health], system_prompt=FITNESS_COACH_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
-    nutritionist = create_agent(model=model, tools=[update_health], system_prompt=NUTRITIONIST_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
+    fitness_coach = create_agent(model=model, tools=strava_tools + [update_health], system_prompt=FITNESS_COACH_PROMPT, state_schema=CopilotKitState, middleware=[CopilotKitMiddleware()])
+    nutritionist = create_agent(model=model, tools=[update_health], system_prompt=NUTRITIONIST_PROMPT, state_schema=CopilotKitState, middleware=[CopilotKitMiddleware()])
 
     def supervisor_router(state: HealthState):
         if not state["messages"]:
             return "fitness_coach"
-            
+
         last_msg = state["messages"][-1]
         content = last_msg.content if hasattr(last_msg, "content") else last_msg.get("content", "")
         content = content.lower()
-        
+
         if any(kw in content for kw in ["meal", "diet", "nutrition", "food", "recipe", "eat"]):
             return "nutritionist"
         return "fitness_coach"  # default

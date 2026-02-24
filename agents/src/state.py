@@ -1,6 +1,7 @@
 """Shared AG-UI state schema — each agent owns one slice"""
 
-from typing import TypedDict, Optional
+from typing_extensions import TypedDict
+from typing import Optional
 
 
 # --- Vision Board (exec_func_coach owns) ---

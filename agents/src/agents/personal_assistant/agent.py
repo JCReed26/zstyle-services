@@ -2,8 +2,8 @@
 
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.graph import StateGraph, END
 from langchain.agents import create_agent
+from langgraph.graph import StateGraph, END
 from copilotkit import CopilotKitMiddleware
 from copilotkit.langgraph import CopilotKitState
 
@@ -39,18 +39,18 @@ def create_personal_assistant_agent():
         calendar_tools = []
 
     # Provide update_personal_assistant tool to all sub-agents
-    email_manager = create_agent(model=model, tools=gmail_tools + [update_personal_assistant], system_prompt=EMAIL_MANAGER_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
-    calendar_agent = create_agent(model=model, tools=calendar_tools + [update_personal_assistant], system_prompt=CALENDAR_AGENT_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
-    task_agent = create_agent(model=model, tools=[update_personal_assistant], system_prompt=TASK_AGENT_PROMPT, middleware=[CopilotKitMiddleware()], state_schema=CopilotKitState)
+    email_manager = create_agent(model=model, tools=gmail_tools + [update_personal_assistant], system_prompt=EMAIL_MANAGER_PROMPT, state_schema=CopilotKitState, middleware=[CopilotKitMiddleware()])
+    calendar_agent = create_agent(model=model, tools=calendar_tools + [update_personal_assistant], system_prompt=CALENDAR_AGENT_PROMPT, state_schema=CopilotKitState, middleware=[CopilotKitMiddleware()])
+    task_agent = create_agent(model=model, tools=[update_personal_assistant], system_prompt=TASK_AGENT_PROMPT, state_schema=CopilotKitState, middleware=[CopilotKitMiddleware()])
 
     def supervisor_router(state: PersonalAssistantState):
         if not state["messages"]:
             return "calendar_agent"
-        
+
         last_msg = state["messages"][-1]
         content = last_msg.content if hasattr(last_msg, "content") else last_msg.get("content", "")
         content = content.lower()
-        
+
         if any(kw in content for kw in ["email", "gmail", "inbox", "send", "reply", "message"]):
             return "email_manager"
         if any(kw in content for kw in ["calendar", "schedule", "event", "block", "meeting", "week"]):
